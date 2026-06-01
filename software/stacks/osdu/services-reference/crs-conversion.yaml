@@ -1,0 +1,108 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: crs-conversion
+  namespace: flux-system
+spec:
+  targetNamespace: osdu
+  interval: 30m
+  install:
+    timeout: 15m
+    remediation:
+      retries: 3
+  upgrade:
+    timeout: 15m
+    remediation:
+      retries: 3
+  chart:
+    spec:
+      chart: ./software/charts/osdu-spi-service
+      sourceRef:
+        kind: GitRepository
+        name: osdu-spi-stack-system
+  values:
+    image:
+      repository: ${CRS_CONVERSION_IMAGE_REPOSITORY}
+      tag: "${CRS_CONVERSION_IMAGE_TAG}"
+    nodeSelector:
+      agentpool: osdu
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: "osdu"
+        effect: NoSchedule
+    probes:
+      liveness:
+        path: /api/crs/converter/actuator/health
+        port: 8080
+        initialDelaySeconds: 250
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      readiness:
+        path: /api/crs/converter/actuator/health
+        port: 8080
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+    env:
+      - name: SPRING_APPLICATION_NAME
+        value: crs-conversion
+      - name: SERVER_SERVLET_CONTEXTPATH
+        value: /api/crs/converter/
+      - name: ACCEPT_HTTP
+        value: "true"
+      - name: AZURE_ISTIOAUTH_ENABLED
+        value: "true"
+      - name: AZURE_PAAS_WORKLOADIDENTITY_ISENABLED
+        value: "true"
+      - name: SIS_DATA
+        value: /app/sis-data
+      - name: SERVICE_DOMAIN_NAME
+        value: dataservices.energy
+      - name: PARTITION_SERVICE_ENDPOINT
+        value: http://partition/api/partition/v1
+      - name: ENTITLEMENT_URL
+        value: http://entitlements/api/entitlements/v2
+      - name: STORAGE_URL
+        value: http://storage/api/storage/v2
+    # Init container to download SIS reference data.
+    # Uses Azure Linux 3.0 (MCR-hosted) with tdnf to install curl and tar.
+    # Runs as root so tdnf can install; all capabilities dropped.
+    initContainers:
+      - name: download-sis-data
+        image: mcr.microsoft.com/azurelinux/base/core:3.0
+        command:
+          - sh
+          - -c
+          - |
+            set -e
+            tdnf install -y curl tar gzip ca-certificates
+            mkdir -p /data/sis-data
+            curl -fsSL -o /tmp/sis.tar.gz "https://community.opengroup.org/osdu/platform/system/reference/crs-conversion-service/-/archive/master/crs-conversion-service-master.tar.gz?path=apachesis_setup/SIS_DATA"
+            tar xzf /tmp/sis.tar.gz -C /data/sis-data --strip-components=3
+        volumeMounts:
+          - name: sis-data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+    volumeMounts:
+      - name: sis-data
+        mountPath: /app/sis-data
+        subPath: sis-data
+    volumes:
+      - name: sis-data
+        emptyDir: {}

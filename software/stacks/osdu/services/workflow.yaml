@@ -1,0 +1,75 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: workflow
+  namespace: flux-system
+spec:
+  targetNamespace: osdu
+  dependsOn:
+    - name: storage
+  interval: 30m
+  install:
+    timeout: 15m
+    remediation:
+      retries: 3
+  upgrade:
+    timeout: 15m
+    remediation:
+      retries: 3
+  chart:
+    spec:
+      chart: ./software/charts/osdu-spi-service
+      sourceRef:
+        kind: GitRepository
+        name: osdu-spi-stack-system
+  values:
+    image:
+      repository: ${WORKFLOW_IMAGE_REPOSITORY}
+      tag: "${WORKFLOW_IMAGE_TAG}"
+    redisTls: true
+    nodeSelector:
+      agentpool: osdu
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: "osdu"
+        effect: NoSchedule
+    env:
+      - name: SPRING_APPLICATION_NAME
+        value: workflow
+      - name: SERVER_SERVLET_CONTEXTPATH
+        value: /api/workflow/
+      - name: ACCEPT_HTTP
+        value: "true"
+      - name: AZURE_ISTIOAUTH_ENABLED
+        value: "true"
+      - name: AZURE_PAAS_WORKLOADIDENTITY_ISENABLED
+        value: "true"
+      - name: SPRING_CONFIG_NAME
+        value: common,application
+      - name: COSMOSDB_DATABASE
+        value: osdu-db
+      - name: COSMOSDB_SYSTEM_DATABASE
+        value: osdu-system-db
+      - name: AZURE_STORAGE_ENABLE_HTTPS
+        value: "true"
+      - name: AUTHORIZEAPI
+        value: http://entitlements/api/entitlements/v2
+      - name: AUTHORIZEAPIKEY
+        value: OBSOLETE
+      - name: PARTITION_SERVICE_ENDPOINT
+        value: http://partition/api/partition/v1
+      - name: OSDU_ENTITLEMENTS_URL
+        value: http://entitlements/api/entitlements/v2
+      - name: OSDU_ENTITLEMENTS_APPKEY
+        value: OBSOLETE
+      - name: OSDU_AIRFLOW_URL
+        value: http://airflow-web.platform.svc.cluster.local:8080/airflow
+      - name: OSDU_AIRFLOW_VERSION2_ENABLED
+        value: "true"
+      - name: DP_AIRFLOW_FOR_SYSTEM_DAG
+        value: "false"
+      - name: IGNORE_DAGCONTENT
+        value: "true"
+      - name: IGNORE_CUSTOMOPERATORCONTENT
+        value: "true"

@@ -1,0 +1,77 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: file
+  namespace: flux-system
+spec:
+  targetNamespace: osdu
+  dependsOn:
+    - name: legal
+  interval: 30m
+  install:
+    timeout: 15m
+    remediation:
+      retries: 3
+  upgrade:
+    timeout: 15m
+    remediation:
+      retries: 3
+  chart:
+    spec:
+      chart: ./software/charts/osdu-spi-service
+      sourceRef:
+        kind: GitRepository
+        name: osdu-spi-stack-system
+  values:
+    image:
+      repository: ${FILE_IMAGE_REPOSITORY}
+      tag: "${FILE_IMAGE_TAG}"
+    redisTls: true
+    nodeSelector:
+      agentpool: osdu
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: "osdu"
+        effect: NoSchedule
+    istioProxyPin:
+      enabled: true
+    env:
+      - name: SPRING_APPLICATION_NAME
+        value: file
+      - name: SERVER_SERVLET_CONTEXTPATH
+        value: /api/file/
+      - name: ACCEPT_HTTP
+        value: "true"
+      - name: AZURE_ISTIOAUTH_ENABLED
+        value: "true"
+      - name: AZURE_PAAS_WORKLOADIDENTITY_ISENABLED
+        value: "true"
+      - name: SPRING_CONFIG_NAME
+        value: common,application
+      - name: COSMOSDB_DATABASE
+        value: osdu-db
+      - name: OSDU_ENTITLEMENTS_APP_KEY
+        value: OBSOLETE
+      - name: AZURE_PUBSUB_PUBLISH
+        value: "true"
+      - name: SERVICE_BUS_ENABLED_STATUS
+        value: "true"
+      - name: SERVICE_BUS_TOPIC_STATUS
+        value: statuschangedtopic
+      - name: BATCH_SIZE
+        value: "100"
+      - name: SEARCH_QUERY_LIMIT
+        value: "1000"
+      - name: PARTITION_SERVICE_ENDPOINT
+        value: http://partition/api/partition/v1
+      - name: OSDU_ENTITLEMENTS_URL
+        value: http://entitlements/api/entitlements/v2
+      - name: authorizeAPI
+        value: http://entitlements/api/entitlements/v2
+      - name: OSDU_STORAGE_URL
+        value: http://storage/api/storage/v2
+      - name: SEARCH_HOST
+        value: http://search/api/search/v2
+      - name: AZURE_AD_APP_RESOURCE_ID
+        value: $(AAD_CLIENT_ID)

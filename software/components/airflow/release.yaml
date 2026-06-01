@@ -1,0 +1,276 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: airflow
+  namespace: flux-system
+spec:
+  # Pin release name so chart resources are named airflow-* (not
+  # platform-airflow-*, which is the default Flux <targetNamespace>-<name>
+  # concatenation). Routes and ReferenceGrants target airflow-webserver,
+  # so the release name must match or Envoy returns 500.
+  releaseName: airflow
+  targetNamespace: platform
+  interval: 30m
+  timeout: 10m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  chart:
+    spec:
+      chart: airflow
+      version: "1.16.*"
+      sourceRef:
+        kind: HelmRepository
+        name: apache-airflow
+  values:
+    executor: KubernetesExecutor
+
+    # Disable Helm hooks for Flux CD compatibility -- Flux manages ordering
+    # via Kustomization dependsOn; hooks cause install timeouts
+    useHelmHooks: false
+
+    # Static webserver secret key from the CLI-generated secret
+    # (per Airflow production guide). Prevents session invalidation on
+    # webserver pod restarts.
+    webserverSecretKeySecretName: airflow-webserver-credentials
+
+    # Use external PostgreSQL (CNPG)
+    postgresql:
+      enabled: false
+    data:
+      metadataSecretName: airflow-metadata-secret
+
+    # Disable PVC persistence -- use emptyDir to avoid storage bloat
+    workers:
+      persistence:
+        enabled: false
+    logs:
+      persistence:
+        enabled: false
+
+    # Database migration job
+    migrateDatabaseJob:
+      enabled: true
+      useHelmHooks: false
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: "platform"
+          effect: NoSchedule
+      nodeSelector:
+        agentpool: platform
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        container:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+    # Create default admin user job.
+    # Override default args so the password from airflow-webserver-credentials
+    # is always enforced, even when the user already exists from a prior
+    # install. 'airflow users create' skips existing users, so we follow up
+    # with 'reset-password' to ensure the secret's password wins.
+    createUserJob:
+      useHelmHooks: false
+      applyCustomEnv: false
+      args:
+        - "bash"
+        - "-c"
+        - |-
+          airflow users create "$@" || true
+          airflow users reset-password -u admin -p "$AIRFLOW_ADMIN_PW"
+        - --
+        - "-r"
+        - "Admin"
+        - "-u"
+        - "admin"
+        - "-e"
+        - "admin@osdu.local"
+        - "-f"
+        - "OSDU"
+        - "-l"
+        - "Admin"
+        - "-p"
+        - "$(AIRFLOW_ADMIN_PW)"
+      env:
+        - name: AIRFLOW_ADMIN_PW
+          valueFrom:
+            secretKeyRef:
+              name: airflow-webserver-credentials
+              key: password
+      resources:
+        requests:
+          cpu: 250m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: "platform"
+          effect: NoSchedule
+      nodeSelector:
+        agentpool: platform
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        container:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+    # Webserver
+    webserver:
+      replicas: 1
+      defaultUser:
+        enabled: true
+        username: admin
+        role: Admin
+        # Placeholder; the real password is injected into createUserJob via
+        # AIRFLOW_ADMIN_PW env from airflow-webserver-credentials and applied
+        # with 'airflow users reset-password'.
+        password: "unused-overridden-by-createUserJob"
+        email: admin@osdu.local
+        firstName: OSDU
+        lastName: Admin
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: "1"
+          # 4 sync gunicorn workers steady-state ~1.9GB total; 1Gi cgroup
+          # OOMs the workers under load.
+          memory: 2Gi
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: "platform"
+          effect: NoSchedule
+      nodeSelector:
+        agentpool: platform
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        container:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+    # Scheduler
+    scheduler:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: "1"
+          memory: 1Gi
+      logGroomerSidecar:
+        enabled: false
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: "platform"
+          effect: NoSchedule
+      nodeSelector:
+        agentpool: platform
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        container:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+    # Triggerer
+    triggerer:
+      persistence:
+        enabled: false
+      replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      logGroomerSidecar:
+        enabled: false
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: "platform"
+          effect: NoSchedule
+      nodeSelector:
+        agentpool: platform
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        container:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+    # StatsD sidecar (AKS Deployment Safeguards compliance)
+    statsd:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: "platform"
+          effect: NoSchedule
+      nodeSelector:
+        agentpool: platform
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        container:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+    # DAGs via git-sync (disabled; OSDU GitLab requires authentication)
+    dags:
+      gitSync:
+        enabled: false
+
+    # Config
+    config:
+      webserver:
+        base_url: "http://localhost:8080/airflow"

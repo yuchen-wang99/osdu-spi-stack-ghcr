@@ -1,0 +1,93 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: unit
+  namespace: flux-system
+spec:
+  targetNamespace: osdu
+  interval: 30m
+  install:
+    timeout: 15m
+    remediation:
+      retries: 3
+  upgrade:
+    timeout: 15m
+    remediation:
+      retries: 3
+  chart:
+    spec:
+      chart: ./software/charts/osdu-spi-service
+      sourceRef:
+        kind: GitRepository
+        name: osdu-spi-stack-system
+  values:
+    image:
+      repository: ${UNIT_IMAGE_REPOSITORY}
+      tag: "${UNIT_IMAGE_TAG}"
+    nodeSelector:
+      agentpool: osdu
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: "osdu"
+        effect: NoSchedule
+    probes:
+      liveness:
+        path: /api/unit/actuator/health
+        port: 8080
+        initialDelaySeconds: 250
+      readiness:
+        path: /api/unit/actuator/health
+        port: 8080
+        initialDelaySeconds: 10
+    env:
+      - name: SPRING_APPLICATION_NAME
+        value: unit
+      - name: SERVER_SERVLET_CONTEXTPATH
+        value: /api/unit/
+      - name: ACCEPT_HTTP
+        value: "true"
+      - name: AZURE_ISTIOAUTH_ENABLED
+        value: "true"
+      - name: AZURE_PAAS_WORKLOADIDENTITY_ISENABLED
+        value: "true"
+      - name: PARTITION_SERVICE_ENDPOINT
+        value: http://partition/api/partition/v1
+      - name: ENTITLEMENT_URL
+        value: http://entitlements/api/entitlements/v2
+    # Init container to download unit catalog data.
+    # Uses Azure Linux 3.0 (MCR-hosted) with tdnf to install curl.
+    # Runs as root so tdnf can install; all capabilities dropped.
+    initContainers:
+      - name: download-catalog
+        image: mcr.microsoft.com/azurelinux/base/core:3.0
+        command:
+          - sh
+          - -c
+          - |
+            tdnf install -y curl ca-certificates
+            curl -sSL -o /data/unit_catalog_v2.json https://community.opengroup.org/osdu/platform/system/reference/unit-service/-/raw/master/data/unit_catalog_v2.json
+        volumeMounts:
+          - name: unit-data
+            mountPath: /data
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+    volumeMounts:
+      - name: unit-data
+        mountPath: /mnt/unit_catalogs
+        readOnly: true
+    volumes:
+      - name: unit-data
+        emptyDir: {}
