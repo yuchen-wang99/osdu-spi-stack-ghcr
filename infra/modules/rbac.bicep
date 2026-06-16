@@ -35,6 +35,7 @@ var roleIds = {
   storageTableDataContributor: '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
   serviceBusDataSender: '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39'
   serviceBusDataReceiver: '4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0'
+  serviceBusDataOwner: '090c5cfd-751d-490a-894a-3ce6f1109419'
   acrPull: '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 }
 
@@ -135,21 +136,11 @@ resource partitionStorageBlobAssignments 'Microsoft.Authorization/roleAssignment
   }
 }]
 
-resource serviceBusSenderAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for (sbName, i) in serviceBusNames: {
+resource serviceBusDataOwnerAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for (sbName, i) in serviceBusNames: {
   scope: serviceBusNamespaces[i]
-  name: guid(serviceBusNamespaces[i].id, principalId, roleIds.serviceBusDataSender)
+  name: guid(serviceBusNamespaces[i].id, principalId, roleIds.serviceBusDataOwner)
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleIds.serviceBusDataSender)
-    principalId: principalId
-    principalType: 'ServicePrincipal'
-  }
-}]
-
-resource serviceBusReceiverAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for (sbName, i) in serviceBusNames: {
-  scope: serviceBusNamespaces[i]
-  name: guid(serviceBusNamespaces[i].id, principalId, roleIds.serviceBusDataReceiver)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleIds.serviceBusDataReceiver)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleIds.serviceBusDataOwner)
     principalId: principalId
     principalType: 'ServicePrincipal'
   }

@@ -10,7 +10,7 @@
 // role assignments that bind the identity to the above.
 //
 // Key Vault secret VALUES are also declared here: static metadata plus
-// ``listKeys()`` on Cosmos accounts is resolved at deploy time, so the CLI
+// ``listKeys()`` on local-auth-enabled partition Cosmos accounts is resolved at deploy time, so the CLI
 // no longer has to run ``az cosmosdb keys list`` + ``az keyvault secret set``
 // post-deploy.
 //
@@ -126,11 +126,8 @@ module gremlinModule 'modules/cosmos-gremlin.bicep' = {
   params: {
     name: gremlinAccountName
     location: location
-    keyVaultName: keyVaultName
+    principalId: identityModule.outputs.principalId
   }
-  dependsOn: [
-    keyvaultModule
-  ]
 }
 
 module storageCommonModule 'modules/storage-common.bicep' = {
@@ -225,12 +222,9 @@ module externalDnsRoleModule 'modules/external-dns-role.bicep' = if (!empty(dnsZ
 // All secret values stay out of the deployment outputs -- they are set
 // only on the child resource and never surface in the deployment record.
 
-// Cosmos primary-key secrets (graph-db-primary-key and
-// {partition}-cosmos-primary-key) are written INSIDE the gremlinModule
-// and partitionModules respectively. ``listKeys()`` on an ``existing``
-// reference at this scope fails with ResourceNotFound because Bicep's
-// dependency analyzer does not chain through the module that creates
-// the account.
+// Partition Cosmos primary-key secrets are written INSIDE each
+// partitionModule. The Gremlin account has local auth disabled, so no
+// graph-db-primary-key secret is written.
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
   name: keyVaultName
@@ -309,8 +303,6 @@ resource secretGraphEndpoint 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   properties: { value: gremlinModule.outputs.documentEndpoint }
   dependsOn: [ keyvaultModule ]
 }
-
-// graph-db-primary-key is written inside gremlinModule; see note above.
 
 resource partitionStorageSecrets 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = [for (p, i) in dataPartitions: {
   name: '${p}-storage'

@@ -26,7 +26,8 @@ Hybrid model:
   - Key Vault soft-delete recovery is imperative pre-check (ARM cannot
     branch on a list-deleted query).
   - Everything else (Managed Identity, federated credentials, Key Vault
-    creation + metadata secrets + Cosmos primary keys via ``listKeys()``,
+    creation + metadata secrets + local-auth-enabled partition Cosmos
+    primary keys via ``listKeys()``,
     ACR, CosmosDB Gremlin + SQL, Service Bus + topics/subs, Storage +
     containers/tables, RBAC role assignments) is declared in Bicep at
     ``infra/main.bicep`` and deployed with ``az deployment group create``.
@@ -114,10 +115,18 @@ def _cosmos_gremlin_name(env: str, suffix: str = "") -> str:
 
 def create_resource_group(config: Config):
     console.print("\n[bold]Creating resource group...[/bold]")
-    # `az group create` is idempotent. The `--tags` flag REPLACES the entire
-    # tag set, so we only pass it the first time (when no suffix tag exists
-    # yet — read_rg_suffix_tag returns None). Otherwise the tag has already
-    # been written, and we re-run create-without-tags to leave it intact.
+    exists = run_command(
+        ["az", "group", "exists", "--name", config.resource_group],
+        description=f"Check resource group exists: {config.resource_group}",
+        display=False,
+        check=False,
+    )
+    if exists.returncode == 0 and exists.stdout.strip().lower() == "true":
+        display_result(f"Resource group {config.resource_group} ready")
+        return
+
+    # `az group create --tags` replaces the entire tag set when the group
+    # already exists, so only call create for a genuinely new resource group.
     cmd = [
         "az",
         "group",
@@ -129,7 +138,7 @@ def create_resource_group(config: Config):
         "--output",
         "json",
     ]
-    if read_rg_suffix_tag(config.resource_group) is None:
+    if config.name_suffix:
         cmd.extend(["--tags", f"{RG_SUFFIX_TAG}={config.name_suffix}"])
     run_command(cmd, description=f"Create resource group: {config.resource_group}")
     display_result(f"Resource group {config.resource_group} ready")
@@ -632,7 +641,7 @@ def provision_azure_infra(config: Config, dry_run: bool = False) -> Dict[str, An
       5. Deploy the main Bicep template (or run what-if preview if
          ``dry_run`` is True). This deploys all PaaS resources AND
          populates Key Vault metadata secrets (tenant-id, endpoints,
-         Cosmos primary keys via ``listKeys()``) declaratively.
+         partition Cosmos primary keys via ``listKeys()``) declaratively.
     """
     outputs: Dict[str, Any] = {}
 

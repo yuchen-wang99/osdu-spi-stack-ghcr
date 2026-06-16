@@ -48,6 +48,8 @@ spec:
         value: "true"
       - name: AZURE_PAAS_WORKLOADIDENTITY_ISENABLED
         value: "true"
+      - name: AZURE_MSI_ISENABLED
+        value: "true"
       - name: SECURITY_HTTPS_CERTIFICATE_TRUST
         value: "true"
       - name: COSMOSDB_DATABASE

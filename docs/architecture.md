@@ -202,8 +202,7 @@ A single User-Assigned Managed Identity (`osdu-identity`) is shared by all OSDU 
 | Key Vault Secrets User | Vault | Read secrets |
 | Storage Blob Data Contributor | Common + per-partition accounts | Blob operations |
 | Storage Table Data Contributor | Common + per-partition accounts | Table operations |
-| Service Bus Data Sender | Per-partition namespace | Publish events |
-| Service Bus Data Receiver | Per-partition namespace | Consume events |
+| Azure Service Bus Data Owner | Per-partition namespace | Publish/consume events and support Service Bus management clients |
 | AcrPull | ACR | Pull container images |
 
 A second UAMI (`external-dns-identity`, scoped `DNS Zone Contributor` on the zone's resource group) is provisioned conditionally when the ingress mode is `dns`. See [ADR-005](decisions/005-workload-identity.md) and [ADR-012](decisions/012-ingress-profiles.md).
@@ -253,7 +252,7 @@ Created by the CLI during K8s bootstrap and mounted into every OSDU service via 
 | PaaS metadata and secret values | Azure Key Vault | SDK reads under Workload Identity (or CSI) |
 | In-cluster middleware passwords | Kubernetes Secrets in `platform`/`osdu` | CLI-generated once per environment |
 
-Most Key Vault secret values are declared in `infra/main.bicep` and resolved at deploy time (including `listKeys()` for Cosmos accounts). A small set of runtime secrets that depend on in-cluster seed passwords (Elasticsearch and Redis credentials, `tbl-storage-endpoint`) are written post-handoff by the CLI. See [ADR-010](decisions/010-keyvault-secret-management.md).
+Most Key Vault secret values are declared in `infra/main.bicep` and resolved at deploy time (including `listKeys()` for local-auth-enabled partition Cosmos accounts). The Gremlin account disables local auth and uses Workload Identity plus a Gremlin Data Contributor assignment instead of a stored graph key. A small set of runtime secrets that depend on in-cluster seed passwords (Elasticsearch and Redis credentials, `tbl-storage-endpoint`) are written post-handoff by the CLI. See [ADR-010](decisions/010-keyvault-secret-management.md).
 
 ### CA distribution and Redis mTLS
 

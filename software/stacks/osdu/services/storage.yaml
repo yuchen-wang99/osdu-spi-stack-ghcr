@@ -47,6 +47,8 @@ spec:
         value: "true"
       - name: AZURE_PAAS_WORKLOADIDENTITY_ISENABLED
         value: "true"
+      - name: AZURE_MSI_ISENABLED
+        value: "true"
       - name: COSMOSDB_DATABASE
         value: osdu-db
       - name: AZURE_SERVICEBUS_ENABLED

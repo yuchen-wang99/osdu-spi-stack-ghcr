@@ -46,9 +46,9 @@ The full rationale is in [ADR-008](../decisions/008-bicep-for-azure-provisioning
 | `keyvault.bicep` | Key Vault resource only | RBAC lives in `rbac.bicep`; secret values are declared in `main.bicep` (runtime secrets land later via CLI) |
 | `acr.bicep` | Container Registry (Basic SKU) | UAMI gets `AcrPull` |
 | `cosmos-gremlin.bicep` | Cosmos DB Gremlin account + graph DB | Entitlements graph; shared across partitions |
-| `partition.bicep` | Per-partition: Cosmos SQL account + 24 containers, Service Bus namespace + 14 topics + 14 subscriptions, Storage account + 5 containers, per-partition KV secrets (`{p}-storage-account-blob-endpoint`, `{p}-cosmos-primary-key`, `{p}-sb-connection`, etc.) | Looped from `main.bicep` over `dataPartitions` |
+| `partition.bicep` | Per-partition: Cosmos SQL account + 24 containers, local-auth-disabled Service Bus namespace + 14 topics + 14 subscriptions, Storage account + 5 containers, per-partition KV secrets (`{p}-storage-account-blob-endpoint`, `{p}-cosmos-primary-key`, `{p}-sb-connection` placeholder, etc.) | Looped from `main.bicep` over `dataPartitions` |
 | `storage-common.bicep` | Common Storage account (legal tags, cross-partition data) | One per environment, not per partition |
-| `rbac.bicep` | RBAC role assignments scoped per resource | Key Vault Secrets User, Storage Blob/Table Data Contributor, Service Bus Data Sender/Receiver, AcrPull |
+| `rbac.bicep` | RBAC role assignments scoped per resource | Key Vault Secrets User, Storage Blob/Table Data Contributor, Azure Service Bus Data Owner, AcrPull |
 | `vnet.bicep` | VNet + private subnet + NAT gateway | Consumed by `aks.bicep` (BYO VNet for AKS egress), not `main.bicep` |
 | `external-dns-identity.bicep` | Second UAMI (`<cluster>-external-dns`) + federated credential to ExternalDNS SA | Conditional on `--ingress-mode dns` |
 | `external-dns-role.bicep` | `DNS Zone Contributor` role on the DNS zone | Deploys into the zone's RG; the role binds to the zone. Conditional on `--ingress-mode dns` |

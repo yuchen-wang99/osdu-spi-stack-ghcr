@@ -40,6 +40,8 @@ spec:
         value: "true"
       - name: AZURE_PAAS_WORKLOADIDENTITY_ISENABLED
         value: "true"
+      - name: AZURE_MSI_ISENABLED
+        value: "true"
       - name: AZURE_SERVICEBUS_TOPIC_NAME
         value: recordstopic
       - name: AZURE_REINDEX_TOPIC_NAME
