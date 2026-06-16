@@ -49,7 +49,7 @@ from .ingress import (
 )
 from .paths import INFRA_ROOT
 from .secrets import ensure_secrets, get_or_create_seed
-from .shell import kubectl_apply_yaml, run_command
+from .shell import kubectl_apply_yaml, resolve_command, run_command
 from .templates import (
     istio_auth_resources,
     osdu_config_configmap,
@@ -215,7 +215,7 @@ def _write_keyvault_bootstrap_secrets(
     for name, value in secrets_to_write:
         while True:
             result = subprocess.run(
-                [
+                resolve_command([
                     "az",
                     "keyvault",
                     "secret",
@@ -228,7 +228,7 @@ def _write_keyvault_bootstrap_secrets(
                     value,
                     "--output",
                     "none",
-                ],
+                ]),
                 capture_output=True,
                 text=True,
             )
@@ -263,7 +263,7 @@ def _pin_gitops_source() -> None:
     console.print("\n[bold]Pinning environment to deploy commit...[/bold]")
 
     wait_result = subprocess.run(
-        [
+        resolve_command([
             "kubectl",
             "wait",
             "--for=condition=Ready",
@@ -271,7 +271,7 @@ def _pin_gitops_source() -> None:
             "-n",
             "flux-system",
             "--timeout=120s",
-        ],
+        ]),
         capture_output=True,
         text=True,
         encoding="utf-8",
