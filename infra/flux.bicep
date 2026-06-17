@@ -33,10 +33,18 @@ param configurationName string = 'osdu-spi-stack-system'
 param activateGitOps bool = true
 
 @description('Namespace for SPI-owned GitRepository, Kustomizations, HelmReleases, and bootstrap ConfigMaps.')
-param gitopsNamespace string = 'osdu-flux'
+param gitopsNamespace string = 'flux-system'
 
 @description('Optional local Kubernetes Secret name for private Git repository auth.')
 param gitRepositoryLocalAuthRef string = ''
+
+@secure()
+@description('Optional SSH private key for private Git repository auth.')
+param gitRepositorySshPrivateKey string = ''
+
+@secure()
+@description('Optional SSH known_hosts content for private Git repository auth.')
+param gitRepositoryKnownHosts string = ''
 
 var gitRepositoryBase = {
   url: repoUrl
@@ -49,6 +57,11 @@ var gitRepositoryBase = {
 
 var gitRepositoryAuth = !empty(gitRepositoryLocalAuthRef) ? {
   localAuthRef: gitRepositoryLocalAuthRef
+} : {}
+
+var protectedSettings = !empty(gitRepositorySshPrivateKey) ? {
+  sshPrivateKey: gitRepositorySshPrivateKey
+  known_hosts: gitRepositoryKnownHosts
 } : {}
 
 resource aks 'Microsoft.ContainerService/managedClusters@2024-10-01' existing = {
@@ -77,16 +90,29 @@ resource gitopsConfig 'Microsoft.KubernetesConfiguration/fluxConfigurations@2024
     scope: 'cluster'
     namespace: gitopsNamespace
     sourceKind: 'GitRepository'
+    configurationProtectedSettings: protectedSettings
     gitRepository: union(gitRepositoryBase, gitRepositoryAuth)
     kustomizations: {
+      inputs: {
+        path: './software/generated/bootstrap-inputs'
+        prune: true
+        syncIntervalInSeconds: 600
+        timeoutInSeconds: 300
+      }
       stack: {
         path: './software/stacks/osdu/profiles/${profile}'
+        dependsOn: [
+          'inputs'
+        ]
         prune: true
         syncIntervalInSeconds: 600
         timeoutInSeconds: 1800
       }
       ingress: {
         path: './software/stacks/osdu/ingress/${ingressMode}'
+        dependsOn: [
+          'inputs'
+        ]
         prune: true
         syncIntervalInSeconds: 600
         timeoutInSeconds: 1800

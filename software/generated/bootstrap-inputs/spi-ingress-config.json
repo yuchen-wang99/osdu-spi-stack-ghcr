@@ -1,0 +1,20 @@
+{
+  "apiVersion": "v1",
+  "kind": "ConfigMap",
+  "metadata": {
+    "name": "spi-ingress-config",
+    "namespace": "flux-system",
+    "labels": {
+      "app.kubernetes.io/managed-by": "osdu-spi-stack"
+    }
+  },
+  "data": {
+    "ACME_EMAIL": "admin@spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com",
+    "AZURE_TENANT_ID": "72f988bf-86f1-41af-91ab-2d7cd011db47",
+    "DNS_LABEL": "spi-stack-dev1-ingress",
+    "GATEWAY_IP": "",
+    "INGRESS_FQDN": "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com",
+    "INGRESS_MODE": "azure",
+    "TXT_OWNER_ID": "spi-stack-dev1"
+  }
+}
