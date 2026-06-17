@@ -363,7 +363,7 @@ def _existing_aks_outputs(config: Config) -> "Dict[str, Any] | None":
 def _grant_deployer_cluster_admin(config: Config, cluster_resource_id: str):
     """Grant the signed-in principal cluster-admin on the AKS cluster and wait for propagation.
 
-    Required because AKS Automatic enforces Azure RBAC for Kubernetes and
+    Required because the cluster enforces Azure RBAC for Kubernetes and
     disables local accounts. Without this role, ``kubectl`` operations
     run by the deployer fail with ``User does not have access to the
     resource in Azure``.

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""SPI CLI - Deploy OSDU SPI Stack on Azure AKS Automatic."""
+"""SPI CLI - Deploy OSDU SPI Stack on Azure AKS."""
 
 import os
 from typing import List, Optional
@@ -37,7 +37,7 @@ from .shell import kubectl_apply_yaml, run_command
 
 app = typer.Typer(
     name="spi",
-    help="SPI Stack - deploy, monitor, and manage OSDU on Azure AKS Automatic.",
+    help="SPI Stack - deploy, monitor, and manage OSDU on Azure AKS.",
     add_completion=False,
 )
 
@@ -59,7 +59,7 @@ def main(
         help="Show the spi version and exit.",
     ),
 ) -> None:
-    """SPI Stack - deploy, monitor, and manage OSDU on Azure AKS Automatic."""
+    """SPI Stack - deploy, monitor, and manage OSDU on Azure AKS."""
 
 
 def _show_config(config: Config):
@@ -294,7 +294,7 @@ def up(
     if dry_run:
         title += "\n[warning]DRY RUN: previewing Bicep changes only[/warning]"
     else:
-        title += "\nAKS Automatic + Azure PaaS + Flux CD GitOps"
+        title += "\nAKS (Base + Node Autoprovisioning) + Azure PaaS + Flux CD GitOps"
 
     console.print(Panel(title, border_style="cyan"))
     check_prerequisites(PREREQ_TOOLS)
