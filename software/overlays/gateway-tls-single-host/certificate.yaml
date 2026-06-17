@@ -8,7 +8,7 @@ metadata:
 spec:
   secretName: osdu-tls
   dnsNames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer

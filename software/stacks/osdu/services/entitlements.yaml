@@ -2,7 +2,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: entitlements
-  namespace: flux-system
+  namespace: osdu-flux
 spec:
   targetNamespace: osdu
   dependsOn:
@@ -21,11 +21,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v3
+        name: osdu-spi-stack-system
   values:
     image:
-      repository: osdudev1ea099.azurecr.io/entitlements
-      tag: "gremlin-msi-direct-61ff3aeb-aiagent-20260615"
+      repository: ${ENTITLEMENTS_IMAGE_REPOSITORY}
+      tag: "${ENTITLEMENTS_IMAGE_TAG}"
     redisTls: true
     nodeSelector:
       agentpool: osdu

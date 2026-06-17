@@ -8,7 +8,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/partition/ }
@@ -26,7 +26,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/entitlements/ }
@@ -44,7 +44,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/legal/ }
@@ -62,7 +62,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/schema-service/ }
@@ -80,7 +80,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/storage/ }
@@ -98,7 +98,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/search/ }
@@ -116,7 +116,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/indexer/ }
@@ -134,7 +134,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/indexer-queue/ }
@@ -152,7 +152,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/file/ }
@@ -170,7 +170,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/workflow/ }
@@ -188,7 +188,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/unit/ }
@@ -206,7 +206,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/crs/catalog/ }
@@ -224,7 +224,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    - "${INGRESS_FQDN}"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /api/crs/converter/ }

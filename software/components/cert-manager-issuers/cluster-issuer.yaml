@@ -7,7 +7,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: "admin@spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    email: "${ACME_EMAIL}"
     privateKeySecretRef:
       name: letsencrypt-staging-account
     solvers:
@@ -27,7 +27,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: "admin@spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
+    email: "${ACME_EMAIL}"
     privateKeySecretRef:
       name: letsencrypt-prod-account
     solvers:

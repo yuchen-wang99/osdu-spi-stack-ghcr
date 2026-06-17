@@ -2,7 +2,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: indexer
-  namespace: flux-system
+  namespace: osdu-flux
 spec:
   targetNamespace: osdu
   dependsOn:
@@ -21,11 +21,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v3
+        name: osdu-spi-stack-system
   values:
     image:
-      repository: community.opengroup.org:5555/osdu/platform/system/indexer-service/indexer-service-master
-      tag: "879b81770795aa054f40da2fd9feb2b485c356a0"
+      repository: ${INDEXER_IMAGE_REPOSITORY}
+      tag: "${INDEXER_IMAGE_TAG}"
     elasticTls: true
     redisTls: true
     nodeSelector:

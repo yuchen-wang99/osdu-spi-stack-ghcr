@@ -2,7 +2,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: partition
-  namespace: flux-system
+  namespace: osdu-flux
 spec:
   targetNamespace: osdu
   interval: 30m
@@ -19,11 +19,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v3
+        name: osdu-spi-stack-system
   values:
     image:
-      repository: community.opengroup.org:5555/osdu/platform/system/partition/partition-master
-      tag: "a2599af2b7a92fe57f1cbcbd28135408b8c5fa12"
+      repository: ${PARTITION_IMAGE_REPOSITORY}
+      tag: "${PARTITION_IMAGE_TAG}"
     redisTls: true
     nodeSelector:
       agentpool: osdu

@@ -2,7 +2,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: crs-conversion
-  namespace: flux-system
+  namespace: osdu-flux
 spec:
   targetNamespace: osdu
   interval: 30m
@@ -19,11 +19,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v3
+        name: osdu-spi-stack-system
   values:
     image:
-      repository: community.opengroup.org:5555/osdu/platform/system/reference/crs-conversion-service/crs-conversion-service-master
-      tag: "feed5d7c2826bfe66c9b2ed85dfc91d90ca3bf56"
+      repository: ${CRS_CONVERSION_IMAGE_REPOSITORY}
+      tag: "${CRS_CONVERSION_IMAGE_TAG}"
     nodeSelector:
       agentpool: osdu
     tolerations:

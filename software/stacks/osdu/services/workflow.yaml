@@ -2,7 +2,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: workflow
-  namespace: flux-system
+  namespace: osdu-flux
 spec:
   targetNamespace: osdu
   dependsOn:
@@ -21,11 +21,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v3
+        name: osdu-spi-stack-system
   values:
     image:
-      repository: community.opengroup.org:5555/osdu/platform/data-flow/ingestion/ingestion-workflow/ingestion-workflow-master
-      tag: "e4ae2ad4b7afd2b2c69bd8c3634a78c301b63114"
+      repository: ${WORKFLOW_IMAGE_REPOSITORY}
+      tag: "${WORKFLOW_IMAGE_TAG}"
     redisTls: true
     nodeSelector:
       agentpool: osdu

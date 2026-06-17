@@ -2,7 +2,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: legal
-  namespace: flux-system
+  namespace: osdu-flux
 spec:
   targetNamespace: osdu
   dependsOn:
@@ -21,11 +21,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v3
+        name: osdu-spi-stack-system
   values:
     image:
-      repository: community.opengroup.org:5555/osdu/platform/security-and-compliance/legal/legal-master
-      tag: "73355cb8f64806dbb994d2605dc98ad0974b09a5"
+      repository: ${LEGAL_IMAGE_REPOSITORY}
+      tag: "${LEGAL_IMAGE_TAG}"
     redisTls: true
     nodeSelector:
       agentpool: osdu

@@ -2,7 +2,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: schema
-  namespace: flux-system
+  namespace: osdu-flux
 spec:
   targetNamespace: osdu
   dependsOn:
@@ -21,11 +21,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v3
+        name: osdu-spi-stack-system
   values:
     image:
-      repository: community.opengroup.org:5555/osdu/platform/system/schema-service/schema-service-master
-      tag: "46b32a400babf6dcaacf1776b3ff218ffaf92916"
+      repository: ${SCHEMA_IMAGE_REPOSITORY}
+      tag: "${SCHEMA_IMAGE_TAG}"
     redisTls: true
     nodeSelector:
       agentpool: osdu

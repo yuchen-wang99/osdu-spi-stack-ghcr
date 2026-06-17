@@ -19,14 +19,14 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-namespaces
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "0"
 spec:
   interval: 10m
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/components/namespaces
   prune: false
   wait: true
@@ -38,7 +38,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-nodepools
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "0"
 spec:
@@ -47,7 +47,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/components/nodepools
   prune: true
   wait: true
@@ -59,7 +59,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-cert-manager
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "1"
 spec:
@@ -68,7 +68,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/components/cert-manager
   prune: true
   wait: true
@@ -80,7 +80,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-trust-manager
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "1"
 spec:
@@ -89,7 +89,7 @@ spec:
     - name: spi-cert-manager
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/components/trust-manager
   prune: true
   wait: true
@@ -101,7 +101,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-eck-operator
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "1"
 spec:
@@ -110,7 +110,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/components/operators/eck
   prune: true
   wait: true
@@ -122,7 +122,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-cnpg-operator
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "1"
 spec:
@@ -131,7 +131,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/components/operators/cnpg
   prune: true
   wait: true
@@ -143,7 +143,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-gateway
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "1"
 spec:
@@ -152,7 +152,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/components/gateway
   prune: true
   wait: true
@@ -164,7 +164,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-elasticsearch
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "2"
 spec:
@@ -174,7 +174,7 @@ spec:
     - name: spi-nodepools
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/components/elasticsearch
   prune: true
   wait: true
@@ -186,7 +186,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-redis
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "2"
 spec:
@@ -196,7 +196,7 @@ spec:
     - name: spi-nodepools
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/components/redis
   prune: true
   wait: true
@@ -208,7 +208,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-postgresql
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "2"
 spec:
@@ -218,7 +218,7 @@ spec:
     - name: spi-nodepools
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/components/postgres
   prune: true
   wait: true
@@ -230,7 +230,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-airflow
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "3"
 spec:
@@ -239,7 +239,7 @@ spec:
     - name: spi-postgresql
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/components/airflow
   prune: true
   wait: true
@@ -251,7 +251,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-osdu-config
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "4"
 spec:
@@ -260,7 +260,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/stacks/osdu/secrets
   prune: false
   wait: true
@@ -276,7 +276,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-bootstrap
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "4"
 spec:
@@ -288,7 +288,7 @@ spec:
     - name: spi-osdu-config
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/stacks/osdu/bootstrap
   prune: true
   wait: true
@@ -300,7 +300,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-osdu-services
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "5"
 spec:
@@ -310,8 +310,12 @@ spec:
     - name: spi-nodepools
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/stacks/osdu/services
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: osdu-image-lock
   prune: true
   wait: true
   timeout: 30m
@@ -328,7 +332,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-osdu-init
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "5"
 spec:
@@ -337,7 +341,7 @@ spec:
     - name: spi-osdu-services
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/stacks/osdu/init
   prune: true
   wait: true
@@ -346,7 +350,7 @@ spec:
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
       name: osdu-spi-init
-      namespace: flux-system
+      namespace: osdu-flux
 
 ---
 # Layer 5b: OSDU schema loader (one-shot Job, see ADR-013)
@@ -358,7 +362,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-osdu-schema-load
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "5"
 spec:
@@ -367,7 +371,7 @@ spec:
     - name: spi-osdu-init
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/stacks/osdu/schema-load
   prune: true
   wait: true
@@ -386,7 +390,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: spi-osdu-reference
-  namespace: flux-system
+  namespace: osdu-flux
   labels:
     spi-stack.layer: "6"
 spec:
@@ -396,8 +400,12 @@ spec:
     - name: spi-osdu-schema-load
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v3
+    name: osdu-spi-stack-system
   path: ./software/stacks/osdu/services-reference
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: osdu-image-lock
   prune: true
   wait: true
   timeout: 30m

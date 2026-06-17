@@ -27,24 +27,16 @@ param profile string = 'core'
 param ingressMode string = 'azure'
 
 @description('Name of the fluxConfigurations resource on the cluster.')
-param configurationName string = 'osdu-spi-stack-system-v3'
+param configurationName string = 'osdu-spi-stack-system'
 
 @description('Create the fluxConfigurations GitOps resource. Set false to install only the Flux extension and namespace.')
 param activateGitOps bool = true
 
 @description('Namespace for SPI-owned GitRepository, Kustomizations, HelmReleases, and bootstrap ConfigMaps.')
-param gitopsNamespace string = 'flux-system'
+param gitopsNamespace string = 'osdu-flux'
 
 @description('Optional local Kubernetes Secret name for private Git repository auth.')
 param gitRepositoryLocalAuthRef string = ''
-
-@secure()
-@description('Optional SSH private key for private Git repository auth.')
-param gitRepositorySshPrivateKey string = ''
-
-@secure()
-@description('Optional SSH known_hosts content for private Git repository auth.')
-param gitRepositoryKnownHosts string = ''
 
 var gitRepositoryBase = {
   url: repoUrl
@@ -59,11 +51,6 @@ var gitRepositoryAuth = !empty(gitRepositoryLocalAuthRef) ? {
   localAuthRef: gitRepositoryLocalAuthRef
 } : {}
 
-var protectedSettings = !empty(gitRepositorySshPrivateKey) ? {
-  sshPrivateKey: gitRepositorySshPrivateKey
-  known_hosts: gitRepositoryKnownHosts
-} : {}
-
 resource aks 'Microsoft.ContainerService/managedClusters@2024-10-01' existing = {
   name: clusterName
 }
@@ -75,6 +62,20 @@ resource fluxExtension 'Microsoft.KubernetesConfiguration/extensions@2024-11-01'
     extensionType: 'microsoft.flux'
     autoUpgradeMinorVersion: true
     releaseTrain: 'Stable'
+    // Disable Flux multi-tenancy enforcement. With it enabled (the default
+    // since extension v1.9), the Azure Flux agent injects
+    // `serviceAccountName: flux-applier` into managed Kustomizations and runs
+    // the OSS controllers with `--default-service-account=flux-applier`. On
+    // AKS Automatic that path is now blocked: the platform's
+    // protect-system-namespaces ValidatingAdmissionPolicy denies impersonating
+    // the flux-applier service account, so every reconcile fails with
+    // `dry-run failed (Forbidden): failed to get server groups`. With
+    // enforcement off the controllers apply as their own exempt flux-system
+    // identities, which can write to protected namespaces and create the
+    // admission webhooks cert-manager and CloudNativePG require.
+    configurationSettings: {
+      'multiTenancy.enforce': 'false'
+    }
     scope: {
       cluster: {
         releaseNamespace: 'flux-system'
@@ -90,7 +91,6 @@ resource gitopsConfig 'Microsoft.KubernetesConfiguration/fluxConfigurations@2024
     scope: 'cluster'
     namespace: gitopsNamespace
     sourceKind: 'GitRepository'
-    configurationProtectedSettings: protectedSettings
     gitRepository: union(gitRepositoryBase, gitRepositoryAuth)
     kustomizations: {
       stack: {
