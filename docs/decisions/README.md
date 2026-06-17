@@ -50,7 +50,7 @@ Create an ADR for any decision that could plausibly have gone a different way an
 | [005](005-workload-identity.md) | Workload Identity for Azure PaaS Access | Accepted |
 | [006](006-three-namespace-model.md) | Three-Namespace Model | Accepted |
 | [007](007-layered-kustomization-ordering.md) | Layered Flux Kustomization Ordering | Accepted |
-| [008](008-bicep-for-azure-provisioning.md) | Bicep for Azure Provisioning (AVM for AKS) | Accepted |
+| [008](008-bicep-for-azure-provisioning.md) | Bicep for Azure Provisioning | Accepted |
 | [009](009-flux-cd-for-gitops.md) | Flux CD + AKS GitOps Extension | Accepted |
 | [010](010-keyvault-secret-management.md) | Key Vault + ConfigMap Secret Model | Accepted |
 | [011](011-trust-manager-ca-distribution.md) | Cross-Namespace CA Distribution via trust-manager | Accepted |

@@ -17,12 +17,11 @@
 Hybrid model:
   - Resource Group creation is imperative (``az group create``); Bicep
     cannot create the RG it deploys into.
-  - AKS Automatic is declared in Bicep at ``infra/aks.bicep`` (AVM
-    ``container-service/managed-cluster``). Two post-deploy imperative
-    steps remain for gaps the AVM module does not cover:
+  - AKS Automatic is declared in Bicep at ``infra/aks.bicep``. Two
+    post-deploy imperative steps remain:
     ``az aks get-credentials`` (kubeconfig merge; not a resource) and
-    ``az aks mesh enable-istio-cni`` (AVM typed ``proxyRedirectionMechanism``
-    out of the IstioComponents schema).
+    ``az aks mesh enable-istio-cni`` (the resource provider rejects
+    ``proxyRedirectionMechanism`` at create time).
   - Key Vault soft-delete recovery is imperative pre-check (ARM cannot
     branch on a list-deleted query).
   - Everything else (Managed Identity, federated credentials, Key Vault
@@ -227,12 +226,11 @@ def detect_legacy_keyvault(resource_group: str, env: str) -> bool:
 def create_aks_automatic(config: Config, dry_run: bool = False) -> Dict[str, Any]:
     """Create an AKS Automatic cluster + managed Istio via Bicep.
 
-    The cluster is declared in ``infra/aks.bicep`` using the AVM
-    ``container-service/managed-cluster`` module. Two imperative post-
-    deploy steps remain for gaps the AVM module does not cover:
+    The cluster is declared in ``infra/aks.bicep``. Two imperative post-
+    deploy steps remain:
     kubeconfig merge (``az aks get-credentials``, not a resource) and
-    Istio CNI chaining (``proxyRedirectionMechanism`` is typed out of
-    the AVM IstioComponents schema).
+    Istio CNI chaining (``proxyRedirectionMechanism`` is rejected by the
+    resource provider at create time).
 
     Returns the flattened Bicep output dict (``clusterName``,
     ``clusterResourceId``, ``oidcIssuerUrl``, ``clusterPrincipalId``).
@@ -241,24 +239,28 @@ def create_aks_automatic(config: Config, dry_run: bool = False) -> Dict[str, Any
     header = "Previewing" if dry_run else "Deploying"
     console.print(f"\n[bold]{header} AKS Automatic cluster via Bicep...[/bold]")
     console.print(
-        "  [info]Cluster is declared in infra/aks.bicep via the AVM managed-cluster module.[/info]"
+        "  [info]Cluster is declared in infra/aks.bicep as a managedClusters resource.[/info]"
     )
-    aks_outputs = run_bicep_deployment(
-        template_path=str(INFRA_AKS_BICEP),
-        parameters={
-            "clusterName": config.cluster_name,
-            "location": config.location,
-        },
-        resource_group=config.resource_group,
-        deployment_name=f"spi-aks-{config.env or 'base'}",
-        what_if=dry_run,
-    )
+    aks_outputs = None if dry_run else _existing_aks_outputs(config)
+    if aks_outputs:
+        display_result(f"AKS Automatic cluster {config.cluster_name} already exists")
+    else:
+        aks_outputs = run_bicep_deployment(
+            template_path=str(INFRA_AKS_BICEP),
+            parameters={
+                "clusterName": config.cluster_name,
+                "location": config.location,
+            },
+            resource_group=config.resource_group,
+            deployment_name=f"spi-aks-{config.env or 'base'}",
+            what_if=dry_run,
+        )
 
-    if dry_run:
-        display_result("AKS Bicep what-if preview complete")
-        return {}
+        if dry_run:
+            display_result("AKS Bicep what-if preview complete")
+            return {}
 
-    display_result(f"AKS Automatic cluster {config.cluster_name} ready")
+        display_result(f"AKS Automatic cluster {config.cluster_name} ready")
 
     console.print("\n[bold]Fetching cluster credentials...[/bold]")
     run_command(
@@ -285,10 +287,10 @@ def create_aks_automatic(config: Config, dry_run: bool = False) -> Dict[str, Any
         description="Convert kubeconfig to azurecli auth",
     )
 
-    # AVM v0.13.0 types proxyRedirectionMechanism out of IstioComponents;
-    # enable CNI chaining imperatively. Idempotent. CNI chaining avoids
-    # the NET_ADMIN capability requirement that the default Istio sidecar
-    # init container needs.
+    # The resource provider rejects proxyRedirectionMechanism at create
+    # time; enable CNI chaining imperatively. Idempotent. CNI chaining
+    # avoids the NET_ADMIN capability requirement that the default Istio
+    # sidecar init container needs.
     _ensure_istio_cni_chaining(config)
 
     # AKS Automatic enforces Azure RBAC for Kubernetes authorization with
@@ -305,6 +307,57 @@ def create_aks_automatic(config: Config, dry_run: bool = False) -> Dict[str, Any
     # satisfy the policy instead.
 
     return aks_outputs
+
+
+def _existing_aks_outputs(config: Config) -> "Dict[str, Any] | None":
+    """Return outputs for an already-ready AKS cluster, or None if absent."""
+    result = run_command(
+        [
+            "az",
+            "aks",
+            "show",
+            "--resource-group",
+            config.resource_group,
+            "--name",
+            config.cluster_name,
+            "--output",
+            "json",
+        ],
+        description=f"Check existing AKS cluster: {config.cluster_name}",
+        display=False,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+
+    cluster = json.loads(result.stdout or "{}")
+    location = (cluster.get("location") or "").lower()
+    if location and location != config.location.lower():
+        raise RuntimeError(
+            f"AKS cluster {config.cluster_name} already exists in {location}, "
+            f"but this run targets {config.location}. Delete the resource group or use "
+            "the existing location."
+        )
+
+    state = cluster.get("provisioningState")
+    if state != "Succeeded":
+        console.print(
+            f"[warning]Existing AKS cluster {config.cluster_name} is {state}; "
+            "submitting Bicep deployment to reconcile it.[/warning]"
+        )
+        return None
+
+    identities = cluster.get("identity", {}).get("userAssignedIdentities", {}) or {}
+    principal_id = ""
+    if identities:
+        principal_id = next(iter(identities.values())).get("principalId", "")
+
+    return {
+        "clusterName": cluster.get("name", config.cluster_name),
+        "clusterResourceId": cluster.get("id", ""),
+        "oidcIssuerUrl": cluster.get("oidcIssuerProfile", {}).get("issuerUrl", ""),
+        "clusterPrincipalId": principal_id,
+    }
 
 
 def _grant_deployer_cluster_admin(config: Config, cluster_resource_id: str):
@@ -398,17 +451,20 @@ def _verify_role_assignment_recorded(user_oid: str, cluster_resource_id: str):
             cluster_resource_id,
             "--role",
             "Azure Kubernetes Service RBAC Cluster Admin",
-            "--query",
-            "length(@)",
             "--output",
-            "tsv",
+            "json",
         ],
         description="Verify cluster-admin assignment exists",
         check=False,
         display=False,
     )
-    count_str = (result.stdout or "").strip()
-    if result.returncode != 0 or not count_str.isdigit() or int(count_str) < 1:
+    assignments = []
+    if result.returncode == 0:
+        try:
+            assignments = json.loads(result.stdout or "[]")
+        except json.JSONDecodeError:
+            assignments = []
+    if result.returncode != 0 or not assignments:
         stderr = (result.stderr or "").strip()
         raise RuntimeError(
             f"Cluster-admin role assignment for {user_oid[:8]}... is not recorded on "
@@ -449,7 +505,7 @@ def _wait_for_cluster_rbac(timeout_seconds: int = 600):
 
 
 def _ensure_istio_cni_chaining(config: Config):
-    """Enable Istio CNI chaining (not expressible in AVM managed-cluster v0.13.0)."""
+    """Enable Istio CNI chaining after AKS create."""
     result = run_command(
         [
             "az",
@@ -472,19 +528,27 @@ def _ensure_istio_cni_chaining(config: Config):
         return
 
     console.print("\n[bold]Enabling Istio CNI chaining...[/bold]")
-    run_command(
-        [
-            "az",
-            "aks",
-            "mesh",
-            "enable-istio-cni",
-            "--resource-group",
-            config.resource_group,
-            "--name",
-            config.cluster_name,
-        ],
-        description="Enable Istio CNI chaining",
-    )
+    previous_dynamic_install = os.environ.get("AZURE_EXTENSION_USE_DYNAMIC_INSTALL")
+    os.environ["AZURE_EXTENSION_USE_DYNAMIC_INSTALL"] = "yes_without_prompt"
+    try:
+        run_command(
+            [
+                "az",
+                "aks",
+                "mesh",
+                "enable-istio-cni",
+                "--resource-group",
+                config.resource_group,
+                "--name",
+                config.cluster_name,
+            ],
+            description="Enable Istio CNI chaining",
+        )
+    finally:
+        if previous_dynamic_install is None:
+            os.environ.pop("AZURE_EXTENSION_USE_DYNAMIC_INSTALL", None)
+        else:
+            os.environ["AZURE_EXTENSION_USE_DYNAMIC_INSTALL"] = previous_dynamic_install
     display_result("Istio CNI chaining enabled")
 
 
@@ -545,6 +609,7 @@ def _recover_soft_deleted_keyvault(config: Config):
 def _build_bicep_params(config: Config, oidc_issuer: str) -> Dict[str, Any]:
     """Translate Config into the parameter dict consumed by infra/main.bicep."""
     s = config.name_suffix
+    deployer_principal_id, deployer_principal_type = _resolve_deployer_principal()
     return {
         "envName": config.env,
         "location": config.location,
@@ -566,11 +631,35 @@ def _build_bicep_params(config: Config, oidc_issuer: str) -> Dict[str, Any]:
         # conditional modules in main.bicep no-op when dnsZoneName is empty.
         "dnsZoneName": config.dns_zone,
         "dnsZoneResourceGroup": config.dns_zone_rg,
-        # Deployer SP OID -- used by rbac.bicep to grant KV Secrets Officer
-        # so Phase 6 (`az keyvault secret set`) succeeds. Empty string is
-        # fine for local users with RG Owner.
-        "deployerPrincipalId": os.environ.get("SPI_DEPLOYER_OID", "").strip(),
+        # Used by rbac.bicep to grant KV Secrets Officer so Phase 6
+        # (`az keyvault secret set`) succeeds against RBAC-enabled vaults.
+        "deployerPrincipalId": deployer_principal_id,
+        "deployerPrincipalType": deployer_principal_type,
     }
+
+
+def _resolve_deployer_principal() -> "tuple[str, str]":
+    """Resolve the current Azure principal for deployer-side RBAC."""
+    env_oid = os.environ.get("SPI_DEPLOYER_OID", "").strip()
+    if env_oid:
+        return env_oid, os.environ.get("SPI_DEPLOYER_PRINCIPAL_TYPE", "ServicePrincipal")
+
+    account_result = run_command(
+        ["az", "account", "show", "--output", "json"],
+        description="Resolve deployer principal for RBAC",
+        display=False,
+    )
+    account = json.loads(account_result.stdout)
+    principal_type = "User" if account.get("user", {}).get("type") == "user" else "ServicePrincipal"
+    if principal_type == "User":
+        oid = run_command(
+            ["az", "ad", "signed-in-user", "show", "--query", "id", "--output", "tsv"],
+            description="Get deployer object ID",
+            display=False,
+        ).stdout.strip()
+        return oid, principal_type
+
+    return "", principal_type
 
 
 def _reshape_bicep_outputs(bicep_outputs: Dict[str, Any]) -> Dict[str, Any]:

@@ -9,8 +9,15 @@
 @description('Principal ID (object ID) of the managed identity.')
 param principalId string
 
-@description('Principal ID (object ID) of the deployer service principal. Empty string skips deployer-side role assignments. Optional because local-dev users typically have Owner on the RG and do not need an explicit grant.')
+@description('Principal ID (object ID) of the deployer. Empty string skips deployer-side role assignments.')
 param deployerPrincipalId string = ''
+
+@description('Principal type of the deployerPrincipalId.')
+@allowed([
+  'User'
+  'ServicePrincipal'
+])
+param deployerPrincipalType string = 'ServicePrincipal'
 
 @description('Key Vault name (existing, created by keyvault.bicep).')
 param keyVaultName string
@@ -75,7 +82,7 @@ resource keyVaultSecretsUserAssignment 'Microsoft.Authorization/roleAssignments@
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleIds.keyVaultSecretsUser)
     principalId: principalId
-    principalType: 'ServicePrincipal'
+    principalType: deployerPrincipalType
   }
 }
 

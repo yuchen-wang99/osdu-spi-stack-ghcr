@@ -24,6 +24,6 @@ Rejected: standard AKS with self-managed Istio. The installation and upgrade cos
 ## Consequences
 
 - Safeguards are cluster-wide and non-bypassable. Every Pod (ours and any upstream chart we consume) must comply; ADR-004 is the authoring-time answer for OSDU services.
-- Istio is Azure-managed. CNI chaining still requires one post-deploy imperative call (`az aks mesh enable-istio-cni`) because the corresponding AVM parameter is typed out of the managed-cluster schema at v0.13.0; ADR-008 tracks that seam.
+- Istio is Azure-managed. CNI chaining still requires one post-deploy imperative call (`az aks mesh enable-istio-cni`) because the resource provider rejects the corresponding create-time property; ADR-008 tracks that seam.
 - Workload Identity is first-class (AKS OIDC issuer on by default); ADR-005 depends on it.
 - The Automatic SKU constrains some knobs (system-pool VM size, outbound network path); `infra/aks.bicep` sets the supported combinations.
