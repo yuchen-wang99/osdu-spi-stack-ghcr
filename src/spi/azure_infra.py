@@ -224,7 +224,7 @@ def detect_legacy_keyvault(resource_group: str, env: str) -> bool:
 
 
 def create_aks_automatic(config: Config, dry_run: bool = False) -> Dict[str, Any]:
-    """Create an AKS Automatic cluster + managed Istio via Bicep.
+    """Create the AKS cluster (Base SKU + Node Autoprovisioning) + managed Istio via Bicep.
 
     The cluster is declared in ``infra/aks.bicep``. Two imperative post-
     deploy steps remain:
@@ -237,13 +237,13 @@ def create_aks_automatic(config: Config, dry_run: bool = False) -> Dict[str, Any
     Returns an empty dict when ``dry_run`` is True.
     """
     header = "Previewing" if dry_run else "Deploying"
-    console.print(f"\n[bold]{header} AKS Automatic cluster via Bicep...[/bold]")
+    console.print(f"\n[bold]{header} AKS cluster via Bicep...[/bold]")
     console.print(
         "  [info]Cluster is declared in infra/aks.bicep as a managedClusters resource.[/info]"
     )
     aks_outputs = None if dry_run else _existing_aks_outputs(config)
     if aks_outputs:
-        display_result(f"AKS Automatic cluster {config.cluster_name} already exists")
+        display_result(f"AKS cluster {config.cluster_name} already exists")
     else:
         aks_outputs = run_bicep_deployment(
             template_path=str(INFRA_AKS_BICEP),
@@ -260,7 +260,7 @@ def create_aks_automatic(config: Config, dry_run: bool = False) -> Dict[str, Any
             display_result("AKS Bicep what-if preview complete")
             return {}
 
-        display_result(f"AKS Automatic cluster {config.cluster_name} ready")
+        display_result(f"AKS cluster {config.cluster_name} ready")
 
     console.print("\n[bold]Fetching cluster credentials...[/bold]")
     run_command(
@@ -293,18 +293,18 @@ def create_aks_automatic(config: Config, dry_run: bool = False) -> Dict[str, Any
     # sidecar init container needs.
     _ensure_istio_cni_chaining(config)
 
-    # AKS Automatic enforces Azure RBAC for Kubernetes authorization with
-    # local accounts disabled, so the deploying principal needs an
-    # explicit cluster-admin role assignment before kubectl can create
-    # namespaces. Role-assignment propagation to AKS typically takes
-    # 2-3 minutes; this step blocks until the permission becomes active.
+    # The cluster enforces Azure RBAC for Kubernetes authorization
+    # (aadProfile.enableAzureRBAC) with local accounts disabled, so the
+    # deploying principal needs an explicit cluster-admin role assignment
+    # before kubectl can create namespaces. Role-assignment propagation to
+    # AKS typically takes 2-3 minutes; this step blocks until active.
     _grant_deployer_cluster_admin(config, aks_outputs.get("clusterResourceId", ""))
 
-    # Deployment Safeguards are not relaxed here. On the Automatic SKU
-    # they are enforced via a non-bypassable ValidatingAdmissionPolicy
-    # that cannot be tuned via `az aks update --safeguards-level`; the
-    # local Helm chart (software/charts/osdu-spi-service) is written to
-    # satisfy the policy instead.
+    # The Base SKU does NOT enable Deployment Safeguards by default (unlike
+    # AKS Automatic, where they were enforced and non-bypassable). The local
+    # Helm chart (software/charts/osdu-spi-service) is still written to be
+    # safeguards-friendly, so the stack stays portable to a safeguards-on
+    # cluster.
 
     return aks_outputs
 
