@@ -82,7 +82,7 @@ resource keyVaultSecretsUserAssignment 'Microsoft.Authorization/roleAssignments@
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleIds.keyVaultSecretsUser)
     principalId: principalId
-    principalType: deployerPrincipalType
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -95,7 +95,7 @@ resource deployerKeyVaultSecretsOfficerAssignment 'Microsoft.Authorization/roleA
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleIds.keyVaultSecretsOfficer)
     principalId: deployerPrincipalId
-    principalType: 'ServicePrincipal'
+    principalType: deployerPrincipalType
   }
 }
 
