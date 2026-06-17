@@ -19,11 +19,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v2
+        name: osdu-spi-stack-system-v3
   values:
     image:
-      repository: ${PARTITION_IMAGE_REPOSITORY}
-      tag: "${PARTITION_IMAGE_TAG}"
+      repository: community.opengroup.org:5555/osdu/platform/system/partition/partition-master
+      tag: "a2599af2b7a92fe57f1cbcbd28135408b8c5fa12"
     redisTls: true
     nodeSelector:
       agentpool: osdu

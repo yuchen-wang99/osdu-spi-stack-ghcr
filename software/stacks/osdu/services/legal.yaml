@@ -21,11 +21,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v2
+        name: osdu-spi-stack-system-v3
   values:
     image:
-      repository: ${LEGAL_IMAGE_REPOSITORY}
-      tag: "${LEGAL_IMAGE_TAG}"
+      repository: community.opengroup.org:5555/osdu/platform/security-and-compliance/legal/legal-master
+      tag: "73355cb8f64806dbb994d2605dc98ad0974b09a5"
     redisTls: true
     nodeSelector:
       agentpool: osdu

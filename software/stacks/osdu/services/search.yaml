@@ -21,11 +21,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v2
+        name: osdu-spi-stack-system-v3
   values:
     image:
-      repository: ${SEARCH_IMAGE_REPOSITORY}
-      tag: "${SEARCH_IMAGE_TAG}"
+      repository: community.opengroup.org:5555/osdu/platform/system/search-service/search-service-master
+      tag: "5b7817c0b2bb79400410b0099de4348ea969f2c0"
     elasticTls: true
     redisTls: true
     nodeSelector:

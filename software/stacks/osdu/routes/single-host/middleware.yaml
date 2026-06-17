@@ -8,7 +8,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "${INGRESS_FQDN}"
+    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /kibana }
@@ -29,7 +29,7 @@ spec:
     - name: spi-gateway
       namespace: aks-istio-ingress
   hostnames:
-    - "${INGRESS_FQDN}"
+    - "spi-stack-dev1-ingress.canadacentral.cloudapp.azure.com"
   rules:
     - matches:
         - path: { type: PathPrefix, value: /airflow }

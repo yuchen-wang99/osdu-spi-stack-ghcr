@@ -26,7 +26,7 @@ spec:
   interval: 10m
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/namespaces
   prune: false
   wait: true
@@ -47,7 +47,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/nodepools
   prune: true
   wait: true
@@ -68,7 +68,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/cert-manager
   prune: true
   wait: true
@@ -89,7 +89,7 @@ spec:
     - name: spi-cert-manager
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/trust-manager
   prune: true
   wait: true
@@ -110,7 +110,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/operators/eck
   prune: true
   wait: true
@@ -131,7 +131,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/operators/cnpg
   prune: true
   wait: true
@@ -152,7 +152,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/gateway
   prune: true
   wait: true
@@ -174,7 +174,7 @@ spec:
     - name: spi-nodepools
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/elasticsearch
   prune: true
   wait: true
@@ -196,7 +196,7 @@ spec:
     - name: spi-nodepools
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/redis
   prune: true
   wait: true
@@ -218,7 +218,7 @@ spec:
     - name: spi-nodepools
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/postgres
   prune: true
   wait: true
@@ -239,7 +239,7 @@ spec:
     - name: spi-postgresql
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/airflow
   prune: true
   wait: true
@@ -260,7 +260,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/stacks/osdu/secrets
   prune: false
   wait: true
@@ -288,7 +288,7 @@ spec:
     - name: spi-osdu-config
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/stacks/osdu/bootstrap
   prune: true
   wait: true
@@ -310,12 +310,8 @@ spec:
     - name: spi-nodepools
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/stacks/osdu/services
-  postBuild:
-    substituteFrom:
-      - kind: ConfigMap
-        name: osdu-image-lock
   prune: true
   wait: true
   timeout: 30m
@@ -341,7 +337,7 @@ spec:
     - name: spi-osdu-services
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/stacks/osdu/init
   prune: true
   wait: true
@@ -371,7 +367,7 @@ spec:
     - name: spi-osdu-init
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/stacks/osdu/schema-load
   prune: true
   wait: true
@@ -400,12 +396,8 @@ spec:
     - name: spi-osdu-schema-load
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/stacks/osdu/services-reference
-  postBuild:
-    substituteFrom:
-      - kind: ConfigMap
-        name: osdu-image-lock
   prune: true
   wait: true
   timeout: 30m

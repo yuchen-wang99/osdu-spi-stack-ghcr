@@ -19,12 +19,7 @@ spec:
       chart: ./software/charts/osdu-spi-init
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v2
-  # Partition list is injected by the CLI via the spi-init-values ConfigMap
-  # in flux-system (written by src/spi/deploy.py::_create_spi_init_values).
-  # Flipping multi-partition on is a --partition CLI flag change; no edits to
-  # this file are required.
-  valuesFrom:
-    - kind: ConfigMap
-      name: spi-init-values
-      valuesKey: values.yaml
+        name: osdu-spi-stack-system-v3
+  values:
+    partitions:
+      - opendes

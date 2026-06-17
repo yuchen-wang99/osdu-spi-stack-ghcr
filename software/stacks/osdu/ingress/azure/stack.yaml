@@ -8,8 +8,8 @@
 # HTTPS:443 listener referencing the cert Secret. All OSDU APIs and
 # middleware UIs (Kibana /kibana, Airflow /airflow) live under one host.
 #
-# Required variables in spi-ingress-config ConfigMap (flux-system):
-#   ACME_EMAIL, INGRESS_FQDN
+# This test branch renders ingress values directly to avoid writing
+# user-managed ConfigMaps into AKS Automatic's protected flux-system namespace.
 
 ---
 # Cert issuers (Let's Encrypt staging + prod).
@@ -27,15 +27,11 @@ spec:
     - name: spi-gateway
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/components/cert-manager-issuers
   prune: true
   wait: true
   timeout: 5m
-  postBuild:
-    substituteFrom:
-      - kind: ConfigMap
-        name: spi-ingress-config
 
 ---
 # Kibana with server.basePath=/kibana so it can serve from a subpath.
@@ -52,7 +48,7 @@ spec:
     - name: spi-elasticsearch
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/overlays/kibana-subpath
   prune: true
   wait: true
@@ -73,15 +69,11 @@ spec:
     - name: spi-cert-manager-issuers
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/overlays/gateway-tls-single-host
   prune: true
   wait: true
   timeout: 10m
-  postBuild:
-    substituteFrom:
-      - kind: ConfigMap
-        name: spi-ingress-config
 
 ---
 # HTTPRoutes for OSDU APIs + middleware UIs on the single FQDN.
@@ -100,12 +92,8 @@ spec:
     - name: spi-gateway-tls
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system-v2
+    name: osdu-spi-stack-system-v3
   path: ./software/stacks/osdu/routes/single-host
   prune: true
   wait: true
   timeout: 5m
-  postBuild:
-    substituteFrom:
-      - kind: ConfigMap
-        name: spi-ingress-config

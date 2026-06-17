@@ -27,7 +27,7 @@ param profile string = 'core'
 param ingressMode string = 'azure'
 
 @description('Name of the fluxConfigurations resource on the cluster.')
-param configurationName string = 'osdu-spi-stack-system-v2'
+param configurationName string = 'osdu-spi-stack-system-v3'
 
 @description('Create the fluxConfigurations GitOps resource. Set false to install only the Flux extension and namespace.')
 param activateGitOps bool = true
@@ -93,26 +93,14 @@ resource gitopsConfig 'Microsoft.KubernetesConfiguration/fluxConfigurations@2024
     configurationProtectedSettings: protectedSettings
     gitRepository: union(gitRepositoryBase, gitRepositoryAuth)
     kustomizations: {
-      inputs: {
-        path: './software/generated/bootstrap-inputs'
-        prune: true
-        syncIntervalInSeconds: 600
-        timeoutInSeconds: 300
-      }
       stack: {
         path: './software/stacks/osdu/profiles/${profile}'
-        dependsOn: [
-          'inputs'
-        ]
         prune: true
         syncIntervalInSeconds: 600
         timeoutInSeconds: 1800
       }
       ingress: {
         path: './software/stacks/osdu/ingress/${ingressMode}'
-        dependsOn: [
-          'inputs'
-        ]
         prune: true
         syncIntervalInSeconds: 600
         timeoutInSeconds: 1800

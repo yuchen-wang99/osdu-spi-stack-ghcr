@@ -45,13 +45,13 @@ def _is_spi_context(context: str) -> bool:
 
 
 def _has_spi_fingerprint() -> bool:
-    """Check if the cluster has the osdu-spi-stack-system-v2 GitRepository.
+    """Check if the cluster has the osdu-spi-stack-system-v3 GitRepository.
 
     Falls back to the AKS Flux configuration via ``az`` when the Flux CRDs
     are not yet installed (e.g., right after ``spi up`` and before the
     extension has installed them).
     """
-    data = kubectl_json(["get", "gitrepository", "osdu-spi-stack-system-v2", "-n", "osdu-flux"])
+    data = kubectl_json(["get", "gitrepository", "osdu-spi-stack-system-v3", "-n", "osdu-flux"])
     if data is not None:
         return True
 
@@ -73,7 +73,7 @@ def _has_spi_fingerprint() -> bool:
             "--cluster-type",
             "managedClusters",
             "--name",
-            "osdu-spi-stack-system-v2",
+            "osdu-spi-stack-system-v3",
             "--query",
             "provisioningState",
             "--output",
@@ -118,7 +118,7 @@ def verify_spi_cluster() -> str:
             f"[error]Context '{ctx}' is set, but the cluster has no spi-stack deployment.[/error]"
         )
         console.print(
-            "[dim]The osdu-spi-stack-system-v2 GitRepository was not found in osdu-flux.[/dim]"
+            "[dim]The osdu-spi-stack-system-v3 GitRepository was not found in osdu-flux.[/dim]"
         )
         console.print(
             "[dim]Run 'uv run spi up' to deploy, or set SPI_SKIP_GUARD=1 to bypass.[/dim]"
@@ -130,7 +130,7 @@ def verify_spi_cluster() -> str:
 
 def get_suspend_status() -> bool:
     """Check if the Flux GitRepository source is suspended."""
-    data = kubectl_json(["get", "gitrepository", "osdu-spi-stack-system-v2", "-n", "osdu-flux"])
+    data = kubectl_json(["get", "gitrepository", "osdu-spi-stack-system-v3", "-n", "osdu-flux"])
     if not data:
         return False
     return bool(data.get("spec", {}).get("suspend", False))

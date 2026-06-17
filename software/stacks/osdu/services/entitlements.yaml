@@ -21,11 +21,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v2
+        name: osdu-spi-stack-system-v3
   values:
     image:
-      repository: ${ENTITLEMENTS_IMAGE_REPOSITORY}
-      tag: "${ENTITLEMENTS_IMAGE_TAG}"
+      repository: osdudev1ea099.azurecr.io/entitlements
+      tag: "gremlin-msi-direct-61ff3aeb-aiagent-20260615"
     redisTls: true
     nodeSelector:
       agentpool: osdu

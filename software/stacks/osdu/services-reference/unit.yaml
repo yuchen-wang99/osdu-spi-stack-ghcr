@@ -19,11 +19,11 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system-v2
+        name: osdu-spi-stack-system-v3
   values:
     image:
-      repository: ${UNIT_IMAGE_REPOSITORY}
-      tag: "${UNIT_IMAGE_TAG}"
+      repository: community.opengroup.org:5555/osdu/platform/system/reference/unit-service/unit-service-master
+      tag: "ff5395c69e6b804daec63b3cc30efc5020d8aa58"
     nodeSelector:
       agentpool: osdu
     tolerations:
