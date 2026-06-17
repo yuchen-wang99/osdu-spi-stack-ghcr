@@ -57,7 +57,7 @@ from .templates import (
     workload_identity_sa,
 )
 
-GITREPO_NAME = "osdu-spi-stack-system"
+GITREPO_NAME = "osdu-spi-stack-system-v2"
 
 INFRA_FLUX_BICEP = INFRA_ROOT / "flux.bicep"
 
@@ -211,7 +211,7 @@ def _deploy_flux_config(config: Config, activate_gitops: bool) -> None:
             "ingressMode": config.ingress_mode.value,
             "activateGitOps": activate_gitops,
             "gitRepositoryLocalAuthRef": (
-                "osdu-spi-stack-system-auth" if config.repo_url.startswith("ssh://") else ""
+                "osdu-spi-stack-system-v2-auth" if config.repo_url.startswith("ssh://") else ""
             ),
         },
         resource_group=config.resource_group,

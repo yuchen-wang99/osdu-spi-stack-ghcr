@@ -27,7 +27,7 @@ spec:
     - name: spi-gateway
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system
+    name: osdu-spi-stack-system-v2
   path: ./software/components/cert-manager-issuers
   prune: true
   wait: true
@@ -53,7 +53,7 @@ spec:
     - name: spi-namespaces
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system
+    name: osdu-spi-stack-system-v2
   path: ./software/components/external-dns
   prune: true
   wait: true
@@ -78,7 +78,7 @@ spec:
     - name: spi-elasticsearch
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system
+    name: osdu-spi-stack-system-v2
   path: ./software/components/kibana
   prune: true
   wait: true
@@ -99,7 +99,7 @@ spec:
     - name: spi-cert-manager-issuers
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system
+    name: osdu-spi-stack-system-v2
   path: ./software/overlays/gateway-tls-multi-host
   prune: true
   wait: true
@@ -127,7 +127,7 @@ spec:
     - name: spi-external-dns
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system
+    name: osdu-spi-stack-system-v2
   path: ./software/stacks/osdu/routes/multi-host
   prune: true
   wait: true

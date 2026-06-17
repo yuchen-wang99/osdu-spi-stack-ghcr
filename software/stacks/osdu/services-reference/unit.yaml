@@ -19,7 +19,7 @@ spec:
       chart: ./software/charts/osdu-spi-service
       sourceRef:
         kind: GitRepository
-        name: osdu-spi-stack-system
+        name: osdu-spi-stack-system-v2
   values:
     image:
       repository: ${UNIT_IMAGE_REPOSITORY}

@@ -17,7 +17,7 @@ spec:
     - name: spi-osdu-services
   sourceRef:
     kind: GitRepository
-    name: osdu-spi-stack-system
+    name: osdu-spi-stack-system-v2
   path: ./software/stacks/osdu/routes/ip-only
   prune: true
   wait: true

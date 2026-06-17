@@ -27,7 +27,7 @@ param profile string = 'core'
 param ingressMode string = 'azure'
 
 @description('Name of the fluxConfigurations resource on the cluster.')
-param configurationName string = 'osdu-spi-stack-system'
+param configurationName string = 'osdu-spi-stack-system-v2'
 
 @description('Create the fluxConfigurations GitOps resource. Set false to install only the Flux extension and namespace.')
 param activateGitOps bool = true
