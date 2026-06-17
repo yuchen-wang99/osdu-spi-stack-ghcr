@@ -59,3 +59,16 @@ spec:
         value: "2"
       - name: PARTITION_SERVICE_ENDPOINT
         value: http://partition/api/partition/v1
+      # Workaround: the custom entitlements image bundles the Application
+      # Insights Java agent + web SDK, which NPEs on every request when no
+      # connection string is configured (AKS Base has no App Insights, unlike
+      # AKS Automatic). A dummy instrumentation key initializes the SDK so the
+      # AI web filter stops throwing NullPointerException. Telemetry is sent to
+      # a non-routable endpoint and fails silently. Proper fix: rebuild the
+      # image without the AI agent, or wire a real App Insights connection.
+      - name: APPINSIGHTS_INSTRUMENTATIONKEY
+        value: "00000000-0000-0000-0000-000000000000"
+      - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+        value: "InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://localhost/"
+      - name: APPLICATIONINSIGHTS_SELF_DIAGNOSTICS_LEVEL
+        value: "OFF"
