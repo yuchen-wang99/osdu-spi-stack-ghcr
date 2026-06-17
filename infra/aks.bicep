@@ -288,3 +288,6 @@ output clusterName string = clusterName
 output clusterResourceId string = aksCluster.id
 output oidcIssuerUrl string = aksCluster.properties.?oidcIssuerProfile.?issuerURL ?? ''
 output clusterPrincipalId string = clusterIdentity.properties.principalId
+
+@description('Object ID of the AKS-managed kubelet (node) identity. Consumed by main.bicep/rbac.bicep to grant AcrPull so nodes can pull images from the SPI ACR (e.g. custom OSDU service images). Empty if not yet populated by the RP.')
+output kubeletIdentityObjectId string = aksCluster.properties.?identityProfile.?kubeletidentity.?objectId ?? ''

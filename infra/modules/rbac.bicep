@@ -19,6 +19,9 @@ param deployerPrincipalId string = ''
 ])
 param deployerPrincipalType string = 'ServicePrincipal'
 
+@description('Object ID of the AKS kubelet (node) identity. Empty string skips the kubelet AcrPull assignment.')
+param kubeletIdentityObjectId string = ''
+
 @description('Key Vault name (existing, created by keyvault.bicep).')
 param keyVaultName string
 
@@ -105,6 +108,21 @@ resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleIds.acrPull)
     principalId: principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// The AKS kubelet (node) identity is what actually PULLS container images for
+// pods. The workload identity above gets AcrPull for app-level access, but
+// image pulls use the kubelet identity, so it needs AcrPull too -- otherwise
+// pods referencing the SPI ACR (e.g. custom OSDU service images swapped in via
+// the osdu-image-lock ConfigMap) fail with ImagePullBackOff.
+resource kubeletAcrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(kubeletIdentityObjectId)) {
+  scope: acr
+  name: guid(acr.id, kubeletIdentityObjectId, roleIds.acrPull)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleIds.acrPull)
+    principalId: kubeletIdentityObjectId
     principalType: 'ServicePrincipal'
   }
 }

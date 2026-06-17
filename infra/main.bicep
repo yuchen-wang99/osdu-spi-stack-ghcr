@@ -99,6 +99,9 @@ param deployerPrincipalId string = ''
 ])
 param deployerPrincipalType string = 'ServicePrincipal'
 
+@description('Object ID of the AKS kubelet (node) identity. Empty string skips the kubelet AcrPull grant. Set by the CLI from the AKS deployment output so nodes can pull custom images from the ACR.')
+param kubeletIdentityObjectId string = ''
+
 // ──────────────────────────────────────────────────────────
 // Modules (shared resources, parallel)
 // ──────────────────────────────────────────────────────────
@@ -175,6 +178,7 @@ module rbacModule 'modules/rbac.bicep' = {
     principalId: identityModule.outputs.principalId
     deployerPrincipalId: deployerPrincipalId
     deployerPrincipalType: deployerPrincipalType
+    kubeletIdentityObjectId: kubeletIdentityObjectId
     keyVaultName: keyVaultName
     acrName: acrName
     commonStorageName: commonStorageName

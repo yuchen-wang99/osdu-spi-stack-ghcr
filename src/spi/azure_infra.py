@@ -606,7 +606,9 @@ def _recover_soft_deleted_keyvault(config: Config):
 # ─────────────────────────────────────────────────────────────
 
 
-def _build_bicep_params(config: Config, oidc_issuer: str) -> Dict[str, Any]:
+def _build_bicep_params(
+    config: Config, oidc_issuer: str, kubelet_identity_object_id: str = ""
+) -> Dict[str, Any]:
     """Translate Config into the parameter dict consumed by infra/main.bicep."""
     s = config.name_suffix
     deployer_principal_id, deployer_principal_type = _resolve_deployer_principal()
@@ -635,6 +637,10 @@ def _build_bicep_params(config: Config, oidc_issuer: str) -> Dict[str, Any]:
         # (`az keyvault secret set`) succeeds against RBAC-enabled vaults.
         "deployerPrincipalId": deployer_principal_id,
         "deployerPrincipalType": deployer_principal_type,
+        # AKS kubelet identity object ID (from the AKS deployment output).
+        # rbac.bicep grants it AcrPull so nodes can pull images from the SPI
+        # ACR (required for custom OSDU service images). Empty in dry-run.
+        "kubeletIdentityObjectId": kubelet_identity_object_id,
     }
 
 
@@ -754,6 +760,7 @@ def provision_azure_infra(config: Config, dry_run: bool = False) -> Dict[str, An
     # the main.bicep preview.
     aks_outputs = create_aks_automatic(config, dry_run=dry_run)
     oidc_issuer = aks_outputs.get("oidcIssuerUrl", "")
+    kubelet_identity_object_id = aks_outputs.get("kubeletIdentityObjectId", "")
 
     if not dry_run:
         _recover_soft_deleted_keyvault(config)
@@ -764,7 +771,7 @@ def provision_azure_infra(config: Config, dry_run: bool = False) -> Dict[str, An
         "  [info]Identity, KeyVault, ACR, CosmosDB, Service Bus, Storage, "
         "and RBAC role assignments are declared in infra/main.bicep.[/info]"
     )
-    bicep_params = _build_bicep_params(config, oidc_issuer)
+    bicep_params = _build_bicep_params(config, oidc_issuer, kubelet_identity_object_id)
     bicep_outputs = run_bicep_deployment(
         template_path=str(INFRA_MAIN_BICEP),
         parameters=bicep_params,
