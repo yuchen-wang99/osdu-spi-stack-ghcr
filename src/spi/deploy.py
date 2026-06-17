@@ -93,6 +93,8 @@ def _create_osdu_config(config: Config, infra_outputs: dict) -> None:
         primary_cosmosdb_endpoint=infra_outputs.get(f"{partition}_cosmos_endpoint", ""),
         primary_storage_account_name=infra_outputs.get("common_storage_name", ""),
         primary_servicebus_namespace=infra_outputs.get(f"{partition}_sb_namespace", ""),
+        appinsights_key=infra_outputs.get("app_insights_instrumentation_key", ""),
+        app_insights_connection_string=infra_outputs.get("app_insights_connection_string", ""),
     )
     display_yaml(yaml_content, "ConfigMap: osdu-config")
     kubectl_apply_yaml(yaml_content, "apply osdu-config ConfigMap")

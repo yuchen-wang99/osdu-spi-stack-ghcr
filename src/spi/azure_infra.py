@@ -641,6 +641,11 @@ def _build_bicep_params(
         # rbac.bicep grants it AcrPull so nodes can pull images from the SPI
         # ACR (required for custom OSDU service images). Empty in dry-run.
         "kubeletIdentityObjectId": kubelet_identity_object_id,
+        # Application Insights + Log Analytics (RG-scoped names). OSDU services
+        # require App Insights initialized (core-lib-azure >= 2.5.6 NPEs without
+        # it); the connection string is wired into osdu-config by deploy.py.
+        "appInsightsName": f"osdu-{config.env or 'base'}-insights",
+        "logAnalyticsName": f"osdu-{config.env or 'base'}-logs",
     }
 
 
@@ -691,6 +696,10 @@ def _reshape_bicep_outputs(bicep_outputs: Dict[str, Any]) -> Dict[str, Any]:
         # DNS-mode outputs (empty strings when ingress mode != dns).
         "external_dns_client_id": bicep_outputs.get("externalDnsClientId", ""),
         "external_dns_principal_id": bicep_outputs.get("externalDnsPrincipalId", ""),
+        # Application Insights (empty when not provisioned; deploy.py falls back
+        # to a disabled/dummy connection string so core-lib-azure does not NPE).
+        "app_insights_connection_string": bicep_outputs.get("appInsightsConnectionString", ""),
+        "app_insights_instrumentation_key": bicep_outputs.get("appInsightsInstrumentationKey", ""),
     }
 
     partition_names = bicep_outputs.get("partitionNames", []) or []

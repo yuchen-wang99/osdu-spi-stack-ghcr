@@ -14,6 +14,16 @@
 
 """YAML templates for Kubernetes resources."""
 
+# Disabled/dummy App Insights fallback. core-lib-azure >= 2.5.6 NPEs on every
+# request if the App Insights SDK is not initialized (see osdu_config_configmap).
+# When no real App Insights is provisioned we still set a syntactically valid
+# connection string so the SDK initializes; the non-routable ingestion endpoint
+# means no telemetry leaves the cluster.
+_DUMMY_AI_INSTRUMENTATION_KEY = "00000000-0000-0000-0000-000000000000"
+_DUMMY_AI_CONNECTION_STRING = (
+    f"InstrumentationKey={_DUMMY_AI_INSTRUMENTATION_KEY};IngestionEndpoint=https://localhost/"
+)
+
 
 def storage_class(
     name: str,
@@ -50,6 +60,7 @@ def osdu_config_configmap(
     primary_storage_account_name: str,
     primary_servicebus_namespace: str,
     appinsights_key: str = "",
+    app_insights_connection_string: str = "",
 ) -> str:
     """ConfigMap with Azure PaaS endpoints for OSDU services.
 
@@ -65,7 +76,20 @@ def osdu_config_configmap(
     UAMI client id (single-resource scope, dodges AADSTS28000); override
     with the AAD_CLIENT_ID host env var to point at a separate OSDU app
     registration.
+
+    APPLICATIONINSIGHTS_CONNECTION_STRING / APPINSIGHTS_INSTRUMENTATIONKEY are
+    consumed by the bundled App Insights Java agent and the core-lib-azure 2.x
+    web SDK. core-lib-azure >= 2.5.6 ships LogCustomDimensionFilter, which reads
+    the App Insights request-telemetry context on EVERY request with no null
+    guard; if App Insights is not initialized the service returns HTTP 500 on
+    every request. AKS Automatic enabled App Insights by default, but AKS Base
+    does not, so we always populate a connection string here -- the real one
+    when App Insights is provisioned (infra/main.bicep), or a disabled/dummy
+    fallback (telemetry goes nowhere) so the SDK still initializes and the
+    filter does not NPE.
     """
+    ai_conn = app_insights_connection_string or _DUMMY_AI_CONNECTION_STRING
+    ai_key = appinsights_key or _DUMMY_AI_INSTRUMENTATION_KEY
     return f"""\
 apiVersion: v1
 kind: ConfigMap
@@ -89,6 +113,9 @@ data:
   REDIS_PORT: "6379"
   SERVER_PORT: "8080"
   APPINSIGHTS_KEY: "{appinsights_key}"
+  APPINSIGHTS_INSTRUMENTATIONKEY: "{ai_key}"
+  APPLICATIONINSIGHTS_CONNECTION_STRING: "{ai_conn}"
+  APPLICATIONINSIGHTS_SELF_DIAGNOSTICS_LEVEL: "OFF"
   ELASTICSEARCH_HOST: "elasticsearch-es-http.platform.svc.cluster.local"
 """
 

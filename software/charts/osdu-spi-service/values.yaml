@@ -92,15 +92,3 @@ tolerations: []
 istioProxyPin:
   enabled: false
   image: mcr.microsoft.com/oss/v2/istio/proxyv2:v1.28.3-2
-
-# -- Application Insights connection string, applied to EVERY service.
-#    core-lib-azure >= 2.5.6 ships LogCustomDimensionFilter, which reads the
-#    App Insights request-telemetry context on every HTTP request with no null
-#    guard; if App Insights is not initialized the context is null and the
-#    service returns HTTP 500 on every request. AKS Automatic enabled App
-#    Insights by default, but AKS Base does not, so we initialize the SDK here.
-#    The default is a disabled/dummy key (telemetry goes to a non-routable
-#    endpoint and fails silently -- nothing leaves the cluster). To enable real
-#    Azure Monitor observability, override with a real connection string.
-appInsightsConnectionString: "InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://localhost/"
-appInsightsInstrumentationKey: "00000000-0000-0000-0000-000000000000"
