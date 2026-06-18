@@ -116,7 +116,7 @@ data:
   APPINSIGHTS_INSTRUMENTATIONKEY: "{ai_key}"
   APPLICATIONINSIGHTS_CONNECTION_STRING: "{ai_conn}"
   APPLICATIONINSIGHTS_SELF_DIAGNOSTICS_LEVEL: "OFF"
-  ELASTICSEARCH_HOST: "elasticsearch-es-http.platform.svc.cluster.local"
+  ELASTICSEARCH_HOST: "elasticsearch-es-http.platform.svc"
 """
 
 

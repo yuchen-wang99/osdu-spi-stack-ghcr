@@ -168,6 +168,7 @@ module partitionModules 'modules/partition.bicep' = [for (p, i) in dataPartition
     storageAccountName: partitionStorageNames[i]
     isPrimaryPartition: p == primaryPartition
     keyVaultName: keyVaultName
+    principalId: identityModule.outputs.principalId
   }
   dependsOn: [
     keyvaultModule

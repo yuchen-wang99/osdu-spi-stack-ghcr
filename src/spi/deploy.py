@@ -242,7 +242,12 @@ def _write_keyvault_bootstrap_secrets(
     """
     console.print("\n[bold]Writing OSDU bootstrap secrets to Key Vault...[/bold]")
     tbl_endpoint = f"https://{storage_account_name}.table.core.windows.net/"
-    elastic_endpoint = "https://elasticsearch-es-http.platform.svc.cluster.local:9200"
+    # The ECK Elasticsearch HTTP cert SANs cover the short service name
+    # (elasticsearch-es-http.platform.svc) but NOT the fully-qualified
+    # ...svc.cluster.local form. With elastic-ssl-enabled=true the OSDU client
+    # verifies the hostname, so the endpoint MUST use a SAN-listed name or
+    # every search/indexer call fails with SSLPeerUnverifiedException.
+    elastic_endpoint = "https://elasticsearch-es-http.platform.svc:9200"
     redis_hostname = "platform-redis-master.platform.svc.cluster.local"
 
     secrets_to_write: list[tuple[str, str]] = [
