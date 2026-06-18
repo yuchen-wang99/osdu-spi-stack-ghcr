@@ -44,7 +44,7 @@ Create an ADR for any decision that could plausibly have gone a different way an
 | ADR | Title | Status |
 |-----|-------|--------|
 | [001](001-azure-paas-for-data.md) | Azure PaaS for OSDU Data Services | Accepted |
-| [002](002-aks-automatic.md) | AKS Automatic as Compute Substrate | Accepted |
+| [002](002-aks-automatic.md) | AKS Automatic as Compute Substrate | Superseded by [019](019-aks-base-node-autoprovisioning.md) |
 | [003](003-in-cluster-middleware-scope.md) | In-Cluster Middleware Scope | Accepted |
 | [004](004-local-helm-chart-safeguards.md) | Local Helm Chart for Safeguards Compliance | Accepted |
 | [005](005-workload-identity.md) | Workload Identity for Azure PaaS Access | Accepted |
@@ -61,3 +61,7 @@ Create an ADR for any decision that could plausibly have gone a different way an
 | [016](016-istio-jwt-projection.md) | Istio JWT Projection for Azure-Provider OSDU Services | Accepted |
 | [017](017-osdu-image-lock.md) | Per-Deploy Image Lock via ConfigMap + Flux Substitution | Accepted |
 | [018](018-karpenter-nodepool-authoring.md) | Karpenter NodePool Authoring as Workload Manifests | Accepted |
+| [019](019-aks-base-node-autoprovisioning.md) | AKS Base SKU with Node Autoprovisioning | Accepted |
+| [020](020-disable-local-auth-data-services.md) | Disable Local Auth on Azure Data Services | Accepted |
+| [021](021-application-insights-telemetry.md) | Application Insights for Service Telemetry | Accepted |
+| [022](022-record-ingestion-data-plane.md) | Record-Ingestion Data-Plane Enablement | Accepted |

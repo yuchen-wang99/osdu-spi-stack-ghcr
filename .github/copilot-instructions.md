@@ -1,6 +1,6 @@
 # OSDU SPI Stack -- Agent Context
 
-Azure-native OSDU deployment using AKS Automatic + Azure PaaS + Flux CD GitOps.
+Azure-native OSDU deployment using AKS (Base SKU + Node Autoprovisioning) + Azure PaaS + Flux CD GitOps.
 Repository: `Azure/osdu-spi-stack`
 
 ## Project Layout
@@ -82,7 +82,7 @@ uv run spi reconcile --resume                # Unfreeze GitOps
 ## Key Design Decisions
 
 - Azure-only (no KinD/AWS/GCP); SPI services depend on Azure PaaS (ADR-001)
-- AKS Automatic with managed Istio and Deployment Safeguards (ADR-002)
+- AKS Base SKU with Node Autoprovisioning + managed Istio (ADR-019, supersedes ADR-002)
 - Imperative CLI bootstrap, then Flux CD + AKS GitOps Extension for K8s workloads (ADR-009)
 - Local Helm chart bakes Safeguards compliance into templates (ADR-004)
 - Workload Identity for all Azure PaaS access; no stored credentials (ADR-005)
@@ -91,6 +91,11 @@ uv run spi reconcile --resume                # Unfreeze GitOps
 - In-cluster only for ES, Redis, PG (Airflow); everything else is Azure PaaS (ADR-003)
 - Azure PaaS provisioning declared in Bicep (`infra/`); RG + AKS + soft-delete
   recovery + post-deploy Key Vault writes remain imperative (ADR-008)
+- Local auth disabled on Cosmos (Gremlin + SQL) and Service Bus for Microsoft-tenant
+  CloudGov policy; Workload Identity + data-plane RBAC instead (ADR-020)
+- Real Application Insights provisioned in Bicep and wired to all services (ADR-021)
+- Record-ingestion data plane enabled: system-cosmos secrets, per-partition record
+  blob container, Elasticsearch TLS (ADR-022)
 
 ## OSDU Service Provider Context
 

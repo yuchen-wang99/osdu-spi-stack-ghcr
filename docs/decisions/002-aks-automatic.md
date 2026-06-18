@@ -1,6 +1,12 @@
 # ADR-002: AKS Automatic as Compute Substrate
 
-**Status**: Accepted
+**Status**: Superseded by [ADR-019](019-aks-base-node-autoprovisioning.md)
+
+> Superseded 2026-06. AKS Automatic began enforcing a non-bypassable guardrail
+> that blocks the `MutatingWebhookConfiguration` objects cert-manager and
+> CloudNativePG require, so the stack can no longer reconcile on Automatic.
+> ADR-019 moves to the Base SKU with Node Autoprovisioning. The rationale below
+> is retained for history.
 
 ## Context
 
