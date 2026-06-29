@@ -37,8 +37,11 @@ identities or role assignments and does not overwrite secrets unless
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import tempfile
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -57,21 +60,144 @@ GH_OIDC_AUDIENCE = "api://AzureADTokenExchange"
 
 # Least-privilege dataActions for the custom deploy role (Azure RBAC for Kubernetes).
 # Mirrors the Kubernetes Role in design SS6.1 step 3: patch the deployment + read the
-# pod/replicaset/event/log chain that `kubectl rollout status` and diagnostics walk.
+# pod/replicaset/event chain that `kubectl rollout status` walks. Pod log read and Flux
+# Kustomization read are intentionally NOT here: Azure RBAC for Kubernetes registers no
+# `pods/log/read` dataAction and no dataAction for the Flux CRD group (verified against the
+# Microsoft.ContainerService provider operations), so `az role definition create` rejects
+# them. Flux Kustomization read (needed by the CI-mode suspend pre-check) is granted via
+# native k8s RBAC instead; see _ensure_flux_read_rbac.
 DEPLOY_DATA_ACTIONS = [
     "Microsoft.ContainerService/managedClusters/apps/deployments/read",
     "Microsoft.ContainerService/managedClusters/apps/deployments/write",
     "Microsoft.ContainerService/managedClusters/apps/replicasets/read",
     "Microsoft.ContainerService/managedClusters/pods/read",
-    "Microsoft.ContainerService/managedClusters/pods/log/read",
     "Microsoft.ContainerService/managedClusters/events/read",
 ]
-# Read-only dataActions for the Flux CI-mode pre-check (list Kustomizations).
-FLUX_READ_DATA_ACTIONS = [
-    "Microsoft.ContainerService/managedClusters/kustomize.toolkit.fluxcd.io/kustomizations/read",
-]
+FLUX_READER_ROLE = "spi-ci-flux-reader"
 AKS_CLUSTER_USER_ROLE = "Azure Kubernetes Service Cluster User Role"
 KEY_VAULT_SECRETS_USER_ROLE = "Key Vault Secrets User"
+
+# Audience the deploy lane's integration-test mints the acceptance-test token against
+# (`az account get-access-token --resource <AAD_CLIENT_ID>`). SPI CI identities are MSIs
+# federated to GitHub; an MSI is not itself a requestable resource (`--resource <msi-appid>`
+# -> AADSTS100040), and the stack has no dedicated OSDU AAD app registration. So the token is
+# minted for ARM (a universally-requestable resource); it carries aud=management.azure.com and
+# appid=<MSI>. The istio RequestAuthentication (ADR-016) trusts this audience and the Lua
+# projects the appid as x-user-id, which entitlements authorizes via the seeded membership.
+AAD_TOKEN_RESOURCE = "https://management.azure.com"
+
+# Entitlements seed (per-identity model). `spi up` only provisions the tenant (the deployer
+# UAMI becomes OWNER of every group); it never grants any other identity access. So once a
+# freshly onboarded CI identity flows as itself through the mesh, it is a member of nothing
+# and 403s every user-facing service. `spi onboard` therefore seeds the new identity into
+# the same four root groups ADME data-seeding uses (InstanceInit.cs), via a short in-cluster
+# Job that runs under the OSDU workload identity (the OWNER, so it is authorized to call the
+# entitlements AddMember API). This is per CI identity, so it belongs to onboard, not to the
+# stack bootstrap.
+WORKLOAD_IDENTITY_SA = "workload-identity-sa"
+SEED_JOB_NAME = "spi-onboard-seed"
+SEED_IMAGE = "python:3.12-slim"
+ENTITLEMENTS_SEED_GROUPS = (
+    "users",
+    "users.datalake.ops",
+    "users.datalake.admins",
+    "users.data.root",
+)
+
+# Self-contained add-member script (no dependency on the bootstrap scripts ConfigMap). It
+# mints a v1.0 management token under the workload identity (matching osdu-spi-init auth.py),
+# discovers the entitlements domain from the OWNER's own group list, then adds the CI
+# identity appid to the four root groups and verifies membership.
+_SEED_SCRIPT = r"""
+import json, os, sys, time, urllib.parse, urllib.request, urllib.error
+
+PARTITION = os.environ["PARTITION"]
+APPID = os.environ["CI_MSI_APPID"].strip().lower()
+ENT = os.environ.get("ENTITLEMENTS_HOST", "http://entitlements.osdu.svc.cluster.local")
+BASE = ENT + "/api/entitlements/v2"
+GROUPS = ["users", "users.datalake.ops", "users.datalake.admins", "users.data.root"]
+
+
+def get_token():
+    tenant = os.environ["AZURE_TENANT_ID"]
+    client = os.environ["AZURE_CLIENT_ID"]
+    path = os.environ.get(
+        "AZURE_FEDERATED_TOKEN_FILE", "/var/run/secrets/azure/tokens/azure-identity-token"
+    )
+    with open(path) as fh:
+        assertion = fh.read().strip()
+    data = urllib.parse.urlencode({
+        "grant_type": "client_credentials",
+        "client_id": client,
+        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "client_assertion": assertion,
+        "resource": "https://management.azure.com/",
+    }).encode()
+    req = urllib.request.Request(
+        "https://login.microsoftonline.com/%s/oauth2/token" % tenant,
+        data=data, method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    return json.loads(urllib.request.urlopen(req, timeout=60).read())["access_token"]
+
+
+def call(method, path, token, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(BASE + path, data=data, method=method, headers={
+        "Content-Type": "application/json", "Accept": "application/json",
+        "Authorization": "Bearer " + token, "data-partition-id": PARTITION})
+    try:
+        resp = urllib.request.urlopen(req, timeout=60)
+        return resp.getcode(), resp.read().decode(errors="replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode(errors="replace")
+
+
+def resolve_domain(token):
+    for _ in range(60):
+        code, payload = call("GET", "/groups", token)
+        if code == 200:
+            groups = json.loads(payload).get("groups", [])
+            for g in groups:
+                email = g.get("email", "")
+                if "@" in email:
+                    right = email.split("@", 1)[1]
+                    if right.startswith(PARTITION + "."):
+                        return right[len(PARTITION) + 1:], len(groups)
+        time.sleep(5)
+    return None, 0
+
+
+def main():
+    print("Seeding entitlements member '%s' into partition '%s'" % (APPID, PARTITION))
+    token = get_token()
+    domain, count = resolve_domain(token)
+    if not domain:
+        print("ERROR: could not resolve entitlements groups for '%s'" % PARTITION)
+        return 1
+    print("  domain = %s (groups visible: %d)" % (domain, count))
+    rc = 0
+    for name in GROUPS:
+        grp = "%s@%s.%s" % (name, PARTITION, domain)
+        code, payload = call("POST", "/groups/%s/members" % grp, token,
+                             {"email": APPID, "role": "MEMBER"})
+        ok = code in (200, 409)
+        print("  add %s -> %s%s" % (grp, code, "" if ok else " " + payload[:160]))
+        if not ok:
+            rc = 1
+    for name in GROUPS:
+        grp = "%s@%s.%s" % (name, PARTITION, domain)
+        code, payload = call("GET", "/groups/%s/members" % grp, token)
+        present = (APPID in payload.lower()) if code == 200 else False
+        print("  verify %s -> present=%s" % (grp, present))
+        if not present:
+            rc = 1
+    print("RESULT rc=%s" % rc)
+    return rc
+
+
+sys.exit(main())
+"""
 
 
 def _resolve(cmd_list: List[str]) -> List[str]:
@@ -105,6 +231,7 @@ class OnboardInputs:
     identities_rg: str
     namespace: str = "osdu"
     flux_namespace: str = "flux-system"
+    partition: str = "opendes"
     keyvault: Optional[str] = None
     gateway_url: Optional[str] = None
     dry_run: bool = False
@@ -400,46 +527,76 @@ def _assign_role(inp: OnboardInputs, role: str, scope: str, description: str) ->
             return
         console.print("  [error]Identity principalId unknown; cannot assign role.[/error]")
         raise typer.Exit(code=1)
-    existing = _az_json(
-        [
-            "role",
-            "assignment",
-            "list",
-            "--assignee",
-            inp.identity_principal_id,
-            "--role",
-            role,
-            "--scope",
-            scope,
-        ],
-        check=False,
-    )
-    if existing:
+    def _assignment_present() -> bool:
+        return bool(
+            _az_json(
+                [
+                    "role",
+                    "assignment",
+                    "list",
+                    "--assignee",
+                    inp.identity_principal_id,
+                    "--role",
+                    role,
+                    "--scope",
+                    scope,
+                ],
+                check=False,
+            )
+        )
+
+    if _assignment_present():
         console.print(f"  [info]{description}: already assigned[/info]")
         return
     if inp.dry_run:
         _plan(f"az role assignment create --role '{role}' --scope {scope}")
         return
-    _run(
-        [
-            "az",
-            "role",
-            "assignment",
-            "create",
-            "--assignee-object-id",
-            inp.identity_principal_id,
-            "--assignee-principal-type",
-            "ServicePrincipal",
-            "--role",
-            role,
-            "--scope",
-            scope,
-            "--output",
-            "none",
-        ],
-        description=description,
-        check=False,
+    # A freshly-created custom role definition can lag in propagation, so
+    # ``az role assignment create`` may transiently fail to resolve --role by name.
+    # Retry with backoff and verify via re-query (the source of truth), then surface
+    # a hard failure rather than continuing silently. Previously this ran once with
+    # check=False, so the propagation-race error was swallowed and the namespace
+    # deploy role was left unassigned (the deploy lane then 403'd and the grant had
+    # to be done by hand).
+    attempts = 6
+    delay_seconds = 10
+    for attempt in range(1, attempts + 1):
+        _run(
+            [
+                "az",
+                "role",
+                "assignment",
+                "create",
+                "--assignee-object-id",
+                inp.identity_principal_id,
+                "--assignee-principal-type",
+                "ServicePrincipal",
+                "--role",
+                role,
+                "--scope",
+                scope,
+                "--output",
+                "none",
+            ],
+            description=description,
+            check=False,
+        )
+        if _assignment_present():
+            if attempt > 1:
+                display_result(f"{description}: assigned (after {attempt} attempts)")
+            return
+        if attempt < attempts:
+            console.print(
+                f"  [warning]{description}: not yet present "
+                f"(attempt {attempt}/{attempts}); retrying in {delay_seconds}s "
+                "(role-definition propagation)[/warning]"
+            )
+            time.sleep(delay_seconds)
+    console.print(
+        f"  [error]{description}: role assignment did not materialize after "
+        f"{attempts} attempts (scope={scope}).[/error]"
     )
+    raise typer.Exit(code=1)
 
 
 def _ensure_custom_deploy_role(inp: OnboardInputs) -> None:
@@ -455,7 +612,7 @@ def _ensure_custom_deploy_role(inp: OnboardInputs) -> None:
         ),
         "Actions": [],
         "NotActions": [],
-        "DataActions": DEPLOY_DATA_ACTIONS + FLUX_READ_DATA_ACTIONS,
+        "DataActions": DEPLOY_DATA_ACTIONS,
         "NotDataActions": [],
         "AssignableScopes": [inp.cluster_resource_id],
     }
@@ -468,20 +625,102 @@ def _ensure_custom_deploy_role(inp: OnboardInputs) -> None:
         return
     # az role definition create is idempotent-friendly via update when it exists.
     action = "update" if existing else "create"
-    _run(
-        [
-            "az",
-            "role",
-            "definition",
-            action,
-            "--role-definition",
-            json.dumps(role_def),
-            "--output",
-            "none",
-        ],
-        description=f"{action.capitalize()} custom role {inp.deploy_role_name}",
-        check=False,
-    )
+    # Pass the role definition as a temp @file rather than inline JSON. On Windows the az
+    # entrypoint is a .cmd shim, and cmd.exe re-parses an inline JSON string (the braces,
+    # quotes, and brackets trip "was unexpected at this time"); the @file form sidesteps all
+    # shell quoting. az reads JSON from the path after the leading '@'.
+    handle = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8")
+    try:
+        json.dump(role_def, handle)
+        handle.close()
+        _run(
+            [
+                "az",
+                "role",
+                "definition",
+                action,
+                "--role-definition",
+                f"@{handle.name}",
+                "--output",
+                "none",
+            ],
+            description=f"{action.capitalize()} custom role {inp.deploy_role_name}",
+            check=True,
+        )
+    finally:
+        os.unlink(handle.name)
+    # A brand-new custom role definition is not immediately resolvable by name in
+    # ``az role assignment create``; poll until it is queryable so the subsequent
+    # namespace-scoped assignment does not lose a propagation race.
+    if action == "create":
+        for _ in range(12):
+            if _az_json(
+                ["role", "definition", "list", "--name", inp.deploy_role_name],
+                check=False,
+            ):
+                break
+            time.sleep(5)
+
+
+def _ensure_flux_read_rbac(inp: OnboardInputs) -> None:
+    """Grant the CI identity read on Flux Kustomizations via native k8s RBAC.
+
+    The deploy lane's CI-mode suspend pre-check lists Kustomizations in the flux namespace.
+    Azure RBAC for Kubernetes registers no dataAction for the Flux CRD group, so this cannot
+    be a custom Azure role; a native Role + RoleBinding is the path (native RBAC is additive
+    to Azure RBAC, so it is honored even with Azure RBAC enabled and local accounts disabled).
+    The binding subject is the identity's AAD object id (principalId), matching how the
+    cluster's Azure RBAC webhook names service-principal callers.
+    """
+    console.print("\n[bold]Ensuring Flux read (native RBAC)...[/bold]")
+    if not inp.identity_principal_id:
+        console.print("  [warning]identity principal id unknown; skipping Flux read RBAC[/warning]")
+        return
+    binding = f"spi-ci-{inp.service}-flux-reader"
+    if inp.dry_run:
+        _plan(
+            f"kubectl apply Role {FLUX_READER_ROLE} + RoleBinding {binding} in "
+            f"'{inp.flux_namespace}' (Kustomizations read for {inp.identity_principal_id})"
+        )
+        return
+    manifest = f"""apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {FLUX_READER_ROLE}
+  namespace: {inp.flux_namespace}
+rules:
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {binding}
+  namespace: {inp.flux_namespace}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {FLUX_READER_ROLE}
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: {inp.identity_principal_id}
+"""
+    handle = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8")
+    try:
+        handle.write(manifest)
+        handle.close()
+        _run(
+            ["kubectl", "apply", "-f", handle.name],
+            description=f"Apply Flux read RBAC ({binding})",
+        )
+        display_result(
+            f"Flux Kustomization read granted to {inp.identity_principal_id} in "
+            f"'{inp.flux_namespace}'"
+        )
+    finally:
+        os.unlink(handle.name)
 
 
 def _ensure_rbac(inp: OnboardInputs) -> None:
@@ -498,15 +737,9 @@ def _ensure_rbac(inp: OnboardInputs) -> None:
         inp.namespace_scope,
         f"Custom deploy role on namespace '{inp.namespace}'",
     )
-    # Flux read lives in the same custom role; assign it at the flux namespace scope too so
-    # the deploy action's suspend pre-check can list Kustomizations there.
-    if inp.flux_namespace != inp.namespace:
-        _assign_role(
-            inp,
-            inp.deploy_role_name,
-            inp.flux_namespace_scope,
-            f"Custom deploy role (flux read) on namespace '{inp.flux_namespace}'",
-        )
+    # Flux Kustomization read for the CI-mode suspend pre-check. Azure RBAC for Kubernetes
+    # has no dataAction for the Flux CRD group, so this is granted via native k8s RBAC.
+    _ensure_flux_read_rbac(inp)
     # 7. Key Vault Secrets User (acceptance-test secrets).
     if inp.keyvault:
         kv = _az_json(["keyvault", "show", "--name", inp.keyvault], check=False)
@@ -526,6 +759,169 @@ def _ensure_rbac(inp: OnboardInputs) -> None:
         console.print(
             "  [info]No --keyvault given; skipping Key Vault grant (set it for integration tests).[/info]"
         )
+
+
+def _render_seed_manifest(inp: OnboardInputs) -> str:
+    """Render the ConfigMap (seed script) + Job that adds the CI identity to entitlements."""
+    indented = "\n".join("    " + ln for ln in _SEED_SCRIPT.strip("\n").splitlines())
+    return f"""apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {SEED_JOB_NAME}
+  namespace: {inp.namespace}
+data:
+  seed_member.py: |
+{indented}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {SEED_JOB_NAME}
+  namespace: {inp.namespace}
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: {WORKLOAD_IDENTITY_SA}
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: {SEED_IMAGE}
+          command: ["python", "/seed/seed_member.py"]
+          env:
+            - name: PARTITION
+              value: "{inp.partition}"
+            - name: CI_MSI_APPID
+              value: "{inp.identity_client_id}"
+            - name: ENTITLEMENTS_HOST
+              value: "http://entitlements.{inp.namespace}.svc.cluster.local"
+          volumeMounts:
+            - name: seed
+              mountPath: /seed
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 1000
+            capabilities:
+              drop: [ALL]
+      volumes:
+        - name: seed
+          configMap:
+            name: {SEED_JOB_NAME}
+"""
+
+
+def _ensure_entitlements_membership(inp: OnboardInputs) -> None:
+    """Seed the onboarded CI identity into the partition's entitlements root groups.
+
+    `spi up` only provisions the tenant (the deployer UAMI becomes OWNER); no other identity
+    is granted access. With per-identity JWT projection a CI identity flows as itself and so
+    403s every user-facing service until it is a real member. This runs a short in-cluster Job
+    under the OSDU workload identity (the OWNER, authorized to AddMember) that POSTs the CI
+    identity's appid into users, users.datalake.ops, users.datalake.admins and users.data.root
+    for the partition. Idempotent: AddMember returns 409 for an existing member, which the Job
+    treats as success.
+    """
+    console.print("\n[bold]Seeding entitlements membership...[/bold]")
+    if not inp.identity_client_id:
+        console.print("  [warning]identity client id unknown; skipping entitlements seed[/warning]")
+        return
+    groups_human = ", ".join(ENTITLEMENTS_SEED_GROUPS)
+    if inp.dry_run:
+        _plan(
+            f"kubectl apply Job {SEED_JOB_NAME} (run as {WORKLOAD_IDENTITY_SA}) adding "
+            f"{inp.identity_client_id} to [{groups_human}]@{inp.partition}.<domain>"
+        )
+        return
+
+    handle = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8")
+    try:
+        handle.write(_render_seed_manifest(inp))
+        handle.close()
+        # The Job spec is immutable; clear any prior run before applying.
+        _run(
+            ["kubectl", "delete", "job", SEED_JOB_NAME, "-n", inp.namespace, "--ignore-not-found"],
+            description="Clear any prior entitlements seed Job",
+            check=False,
+        )
+        _run(
+            ["kubectl", "apply", "-f", handle.name],
+            description=f"Apply entitlements seed Job for {inp.identity_client_id}",
+        )
+        subprocess.run(
+            _resolve(
+                [
+                    "kubectl",
+                    "wait",
+                    "--for=condition=complete",
+                    f"job/{SEED_JOB_NAME}",
+                    "-n",
+                    inp.namespace,
+                    "--timeout=240s",
+                ]
+            ),
+            capture_output=True,
+            text=True,
+        )
+        logs = (
+            subprocess.run(
+                _resolve(
+                    ["kubectl", "logs", f"job/{SEED_JOB_NAME}", "-n", inp.namespace, "--tail=40"]
+                ),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            ).stdout
+            or ""
+        )
+        for line in logs.splitlines():
+            if line.strip():
+                console.print(f"    [dim]{line}[/dim]")
+        if "RESULT rc=0" not in logs:
+            console.print(
+                "  [error]Entitlements seed did not complete; see Job logs above. Confirm the "
+                "stack is deployed and tenant-provisioning has run.[/error]"
+            )
+            raise typer.Exit(code=1)
+        display_result(
+            f"CI identity {inp.identity_client_id} seeded into [{groups_human}]@{inp.partition}"
+        )
+    finally:
+        _run(
+            [
+                "kubectl",
+                "delete",
+                "job",
+                SEED_JOB_NAME,
+                "-n",
+                inp.namespace,
+                "--ignore-not-found",
+                "--wait=false",
+            ],
+            description="Remove entitlements seed Job",
+            check=False,
+        )
+        _run(
+            [
+                "kubectl",
+                "delete",
+                "configmap",
+                SEED_JOB_NAME,
+                "-n",
+                inp.namespace,
+                "--ignore-not-found",
+                "--wait=false",
+            ],
+            description="Remove entitlements seed ConfigMap",
+            check=False,
+        )
+        os.unlink(handle.name)
 
 
 def _list_kv_secret_names(vault: str) -> List[str]:
@@ -648,6 +1044,11 @@ def _write_handoff(inp: OnboardInputs) -> None:
     _gh_set_variable(inp, "AKS_CLUSTER_NAME", inp.aks_cluster)
     _gh_set_variable(inp, "K8S_NAMESPACE", inp.namespace)
     _gh_set_variable(inp, "FLUX_NAMESPACE", inp.flux_namespace)
+    # AAD_CLIENT_ID is the resource/audience the integration-test mints the acceptance-test
+    # token for, NOT an identity. SPI MSIs can only mint ARM-audience tokens, so this is a
+    # constant; the CI identity is carried by AZURE_CLIENT_ID (the token's appid). See
+    # AAD_TOKEN_RESOURCE.
+    _gh_set_variable(inp, "AAD_CLIENT_ID", AAD_TOKEN_RESOURCE)
     if inp.keyvault:
         _gh_set_variable(inp, "KEYVAULT_NAME", inp.keyvault)
     if inp.gateway_url:
@@ -733,6 +1134,7 @@ def onboard(inp: OnboardInputs) -> None:
     _ensure_identity(inp)
     _ensure_federated_credentials(inp)
     _ensure_rbac(inp)
+    _ensure_entitlements_membership(inp)
     _write_handoff(inp)
     _emit_summary(inp)
 
