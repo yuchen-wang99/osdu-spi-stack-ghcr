@@ -527,6 +527,7 @@ def _assign_role(inp: OnboardInputs, role: str, scope: str, description: str) ->
             return
         console.print("  [error]Identity principalId unknown; cannot assign role.[/error]")
         raise typer.Exit(code=1)
+
     def _assignment_present() -> bool:
         return bool(
             _az_json(

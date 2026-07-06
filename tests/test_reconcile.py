@@ -42,8 +42,9 @@ def test_set_flux_suspend_freezes_gitrepository_kustomizations_and_helmreleases(
         return None
 
     calls = []
-    with mock.patch.object(cli, "kubectl_json", side_effect=fake_kubectl_json), mock.patch.object(
-        cli, "run_command", side_effect=lambda cmd, **kw: calls.append(cmd)
+    with (
+        mock.patch.object(cli, "kubectl_json", side_effect=fake_kubectl_json),
+        mock.patch.object(cli, "run_command", side_effect=lambda cmd, **kw: calls.append(cmd)),
     ):
         cli._set_flux_suspend("osdu-flux", True)
 

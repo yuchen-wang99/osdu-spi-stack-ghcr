@@ -51,13 +51,13 @@ The deployment pipeline has two phases: the CLI's Bicep-driven bootstrap (top) a
 | Phase | Mechanism | What |
 |-------|-----------|------|
 | 1. Resource Group | `az group create` | Resource group for the environment |
-| 2. AKS + managed Istio | Bicep (`infra/aks.bicep`, AVM `container-service/managed-cluster`) | AKS Automatic cluster, BYO VNet + NAT gateway, managed Istio |
+| 2. AKS + managed Istio | Raw Bicep (`infra/aks.bicep`) | AKS Base SKU cluster with Node Autoprovisioning (NAP / Karpenter), BYO VNet + NAT gateway, managed Istio |
 | 3. Azure PaaS | Bicep (`infra/main.bicep`) | Managed Identity + federated credentials, Key Vault + static metadata secrets, ACR, Cosmos DB Gremlin + per-partition SQL, per-partition Service Bus (topics + subscriptions), common + per-partition Storage, RBAC role assignments |
 | 4. K8s bootstrap | `kubectl apply` | Namespaces, StorageClasses, `workload-identity-sa`, `osdu-config` ConfigMap, `spi-ingress-config` ConfigMap |
 | 5. Flux activation | Bicep (`infra/flux.bicep`) | AKS Flux extension + `fluxConfigurations` with two Kustomizations (stack profile, ingress mode) |
 | 6. Runtime KV secrets | `az keyvault secret set` | Per-partition Elasticsearch credentials, Redis hostname and password, written from the generated seed (no wait for middleware) |
 
-A full `spi up` typically takes ~45-50 minutes, dominated by AKS Automatic provisioning (~30 min) with PaaS Bicep (~3 min), K8s bootstrap (~1 min), and the Flux extension Bicep (~10-15 min) filling the remainder. `spi up --dry-run` runs `az deployment group what-if` against both Bicep templates and skips everything after phase 1.
+A full `spi up` typically takes ~45-50 minutes, dominated by AKS provisioning (~30 min) with PaaS Bicep (~3 min), K8s bootstrap (~1 min), and the Flux extension Bicep (~10-15 min) filling the remainder. `spi up --dry-run` runs `az deployment group what-if` against both Bicep templates and skips everything after phase 1.
 
 ## Runtime Architecture
 
@@ -93,21 +93,29 @@ The core profile (`software/stacks/osdu/profiles/core/stack.yaml`) defines seven
 
 The ingress profile (`software/stacks/osdu/ingress/<mode>/`) adds Kustomizations at Layer 1 (cert issuers, ExternalDNS in `dns` mode, TLS overlays) and Layer 6 (HTTPRoutes). See [ADR-007](decisions/007-layered-kustomization-ordering.md) and [ADR-012](decisions/012-ingress-profiles.md).
 
-## AKS Automatic
+## AKS Compute (Base SKU + Node Autoprovisioning)
 
-SPI Stack uses AKS Automatic, which provides:
+SPI Stack runs the AKS Base SKU with Node Autoprovisioning. It previously used
+AKS Automatic; [ADR-021](decisions/021-aks-base-node-autoprovisioning.md)
+supersedes [ADR-002](decisions/002-aks-automatic.md) because Automatic began
+enforcing a non-bypassable guardrail that blocks the
+`MutatingWebhookConfiguration` objects cert-manager and CloudNativePG require.
+The Base SKU keeps the features the stack depends on, wired explicitly:
 
 | Feature | What it does |
 |---------|-------------|
-| **Karpenter** | Node Auto-Provisioning; user-declared NodePool CRs at Layer 0b |
+| **Karpenter (NAP)** | Node Auto-Provisioning; user-declared NodePool CRs at Layer 0b |
 | **Managed Istio** | Service mesh with mTLS, sidecar injection, ingress gateway |
-| **Deployment Safeguards** | Non-bypassable admission policies (non-root, seccomp, capability drop, probes, resource limits) |
-| **Key Vault CSI** | Secrets Provider driver available to workloads |
+| **Workload Identity** | OIDC issuer + federated credentials (explicit on Base) |
+| **Azure RBAC for Kubernetes** | Cluster authorization (explicit on Base) |
 | **Cilium CNI** | eBPF networking in overlay mode |
-| **Managed Prometheus** | Metrics to Azure Monitor |
-| **Container Insights** | Logs to Log Analytics |
+| **Managed Prometheus / Container Insights** | Cluster metrics and logs to Azure Monitor / Log Analytics |
+| **Application Insights** | Per-service request, dependency, and exception telemetry ([ADR-023](decisions/023-application-insights-telemetry.md)) |
 
-Safeguards are non-bypassable, so every pod must comply:
+Deployment Safeguards were an Automatic-only feature and are no longer
+cluster-enforced. Compliance does not regress: the local `osdu-spi-service`
+Helm chart bakes the same pod hardening into its templates so services comply
+at authoring time:
 
 - `securityContext.runAsNonRoot: true`
 - `securityContext.seccompProfile.type: RuntimeDefault`
@@ -116,7 +124,8 @@ Safeguards are non-bypassable, so every pod must comply:
 - Resource requests and limits defined
 - Liveness and readiness probes defined
 
-The local `osdu-spi-service` Helm chart bakes these into its templates so services comply at authoring time. See [ADR-002](decisions/002-aks-automatic.md) and [ADR-004](decisions/004-local-helm-chart-safeguards.md).
+See [ADR-021](decisions/021-aks-base-node-autoprovisioning.md) and
+[ADR-004](decisions/004-local-helm-chart-safeguards.md).
 
 ## Ingress Profiles
 
@@ -202,8 +211,7 @@ A single User-Assigned Managed Identity (`osdu-identity`) is shared by all OSDU 
 | Key Vault Secrets User | Vault | Read secrets |
 | Storage Blob Data Contributor | Common + per-partition accounts | Blob operations |
 | Storage Table Data Contributor | Common + per-partition accounts | Table operations |
-| Service Bus Data Sender | Per-partition namespace | Publish events |
-| Service Bus Data Receiver | Per-partition namespace | Consume events |
+| Azure Service Bus Data Owner | Per-partition namespace | Publish/consume events and support Service Bus management clients |
 | AcrPull | ACR | Pull container images |
 
 A second UAMI (`external-dns-identity`, scoped `DNS Zone Contributor` on the zone's resource group) is provisioned conditionally when the ingress mode is `dns`. See [ADR-005](decisions/005-workload-identity.md) and [ADR-012](decisions/012-ingress-profiles.md).
@@ -253,7 +261,7 @@ Created by the CLI during K8s bootstrap and mounted into every OSDU service via 
 | PaaS metadata and secret values | Azure Key Vault | SDK reads under Workload Identity (or CSI) |
 | In-cluster middleware passwords | Kubernetes Secrets in `platform`/`osdu` | CLI-generated once per environment |
 
-Most Key Vault secret values are declared in `infra/main.bicep` and resolved at deploy time (including `listKeys()` for Cosmos accounts). A small set of runtime secrets that depend on in-cluster seed passwords (Elasticsearch and Redis credentials, `tbl-storage-endpoint`) are written post-handoff by the CLI. See [ADR-010](decisions/010-keyvault-secret-management.md).
+Most Key Vault secret values are declared in `infra/main.bicep` and resolved at deploy time (including `listKeys()` for local-auth-enabled partition Cosmos accounts). The Gremlin account disables local auth and uses Workload Identity plus a Gremlin Data Contributor assignment instead of a stored graph key. A small set of runtime secrets that depend on in-cluster seed passwords (Elasticsearch and Redis credentials, `tbl-storage-endpoint`) are written post-handoff by the CLI. See [ADR-010](decisions/010-keyvault-secret-management.md).
 
 ### CA distribution and Redis mTLS
 
@@ -265,10 +273,11 @@ Redis and Elasticsearch TLS CAs live as Secrets in `platform`. trust-manager (in
 
 | Resource | Purpose | Sizing |
 |----------|---------|--------|
-| AKS Automatic | Compute | Karpenter-managed |
+| AKS (Base SKU + NAP) | Compute | Karpenter-managed |
 | Cosmos DB Gremlin | Entitlements graph | 4000 RU/s autoscale |
 | Key Vault | Secret management | Standard, RBAC-enabled |
 | ACR | Container images | Basic SKU |
+| Application Insights + Log Analytics | Service telemetry and logs | Workspace-based, 30-day retention |
 | Managed Identity (`osdu-identity`) | Workload Identity | Single, shared |
 | Managed Identity (`external-dns-identity`) | DNS Zone Contributor | Conditional on `dns` ingress mode |
 
@@ -278,7 +287,7 @@ Redis and Elasticsearch TLS CAs live as Secrets in `platform`. trust-manager (in
 |----------|---------|--------|
 | Cosmos DB SQL | Operational data | 4000 RU/s autoscale, 24 containers |
 | Service Bus | Async messaging | Standard SKU, 14 topics, 14 subscriptions |
-| Storage account | Blob and table storage | Standard LRS, 5 containers |
+| Storage account | Blob and table storage | Standard LRS, 6 containers (5 service + 1 record) |
 
 ### In-cluster (per environment)
 
