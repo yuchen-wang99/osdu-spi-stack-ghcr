@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""SPI CLI - Deploy OSDU SPI Stack on Azure AKS Automatic."""
+"""SPI CLI - Deploy OSDU SPI Stack on Azure AKS."""
 
 import os
 from typing import List, Optional
@@ -37,7 +37,7 @@ from .shell import kubectl_apply_yaml, kubectl_json, run_command
 
 app = typer.Typer(
     name="spi",
-    help="SPI Stack - deploy, monitor, and manage OSDU on Azure AKS Automatic.",
+    help="SPI Stack - deploy, monitor, and manage OSDU on Azure AKS.",
     add_completion=False,
 )
 
@@ -59,7 +59,7 @@ def main(
         help="Show the spi version and exit.",
     ),
 ) -> None:
-    """SPI Stack - deploy, monitor, and manage OSDU on Azure AKS Automatic."""
+    """SPI Stack - deploy, monitor, and manage OSDU on Azure AKS."""
 
 
 def _show_config(config: Config):
@@ -97,7 +97,7 @@ def _show_next_steps(config: Config):
     table.add_column("Action", style="cyan")
     table.add_column("Command", style="yellow")
 
-    table.add_row("Watch progress", "kubectl get kustomizations -n flux-system --watch")
+    table.add_row("Watch progress", "kubectl get kustomizations -n osdu-flux --watch")
     table.add_row("Check operators", "kubectl get pods -n foundation")
     table.add_row("Check middleware", "kubectl get pods -n platform")
     table.add_row("Check services", "kubectl get pods -n osdu")
@@ -294,7 +294,7 @@ def up(
     if dry_run:
         title += "\n[warning]DRY RUN: previewing Bicep changes only[/warning]"
     else:
-        title += "\nAKS Automatic + Azure PaaS + Flux CD GitOps"
+        title += "\nAKS (Base + Node Autoprovisioning) + Azure PaaS + Flux CD GitOps"
 
     console.print(Panel(title, border_style="cyan"))
     check_prerequisites(PREREQ_TOOLS)
@@ -476,9 +476,7 @@ def reconcile(
 
     if suspend:
         ns = resolve_flux_namespace()
-        console.print(
-            f"\n[bold]Entering CI mode: freezing Flux reconciliation in '{ns}'...[/bold]"
-        )
+        console.print(f"\n[bold]Entering CI mode: freezing Flux reconciliation in '{ns}'...[/bold]")
         _set_flux_suspend(ns, True)
         console.print(
             "[warning]GitRepository, Kustomizations, and HelmReleases suspended.[/warning]"
@@ -493,9 +491,7 @@ def reconcile(
         ns = resolve_flux_namespace()
         console.print(f"\n[bold]Resuming Flux reconciliation in '{ns}'...[/bold]")
         _set_flux_suspend(ns, False)
-        console.print(
-            "[success]GitRepository, Kustomizations, and HelmReleases resumed.[/success]"
-        )
+        console.print("[success]GitRepository, Kustomizations, and HelmReleases resumed.[/success]")
         return
 
     if refresh_images:

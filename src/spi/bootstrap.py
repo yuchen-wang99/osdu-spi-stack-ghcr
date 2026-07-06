@@ -14,8 +14,6 @@
 
 """In-cluster bootstrap: namespaces, StorageClasses, Gateway API CRDs."""
 
-import subprocess
-
 from .console import console, display_result, display_yaml
 from .shell import kubectl_apply_yaml, kubectl_json, run_command
 from .templates import storage_class
@@ -47,12 +45,14 @@ def ensure_namespaces(istio_revision: str = "") -> None:
         istio_revision = _detect_istio_revision()
     console.print(f"  [info]Istio revision: {istio_revision}[/info]")
 
-    for ns in ["flux-system", "foundation", "platform"]:
-        subprocess.run(
-            ["kubectl", "create", "namespace", ns],
-            capture_output=True,
-            text=True,
-        )
+    for ns in ["osdu-flux", "foundation", "platform"]:
+        yaml_content = f"""\
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {ns}
+"""
+        kubectl_apply_yaml(yaml_content, f"create namespace {ns}")
 
     # Only osdu namespace gets Istio injection (platform middleware
     # does not need the service mesh and istio-init requires NET_ADMIN
