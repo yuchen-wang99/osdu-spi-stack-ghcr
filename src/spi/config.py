@@ -21,6 +21,8 @@ from typing import List
 
 from pydantic import BaseModel, model_validator
 
+from .images import DEFAULT_GHCR_ORG, DEFAULT_GHCR_TAG, ImageSource
+
 # Partition names must be lowercase alphanumeric. Hyphens and underscores are
 # stripped at Azure-resource-name time (`_storage_name` in azure_infra.py),
 # so allowing them here would silently collide two configured partitions.
@@ -82,6 +84,13 @@ class Config(BaseModel):
     # is persisted on the resource group so idempotent reruns preserve the
     # environment's original observability mode.
     application_insights: bool = False
+    # Service image baseline. The yuchen SPI Stack defaults to images produced
+    # by the yuchen-osdu service forks; community GitLab remains an explicit
+    # compatibility fallback.
+    image_source: ImageSource = ImageSource.GHCR
+    image_org: str = DEFAULT_GHCR_ORG
+    image_tag: str = DEFAULT_GHCR_TAG
+    image_ref: str = ""
     # Random 5-char suffix used by globally unique resource names (storage,
     # KV, ACR, Cosmos, Service Bus). Persisted as the `spi-name-suffix` tag
     # on the resource group; an empty value marks a legacy (pre-suffix)
@@ -145,6 +154,17 @@ class Config(BaseModel):
 
     @model_validator(mode="after")
     def _validate_data_partitions(self) -> "Config":
+        if self.image_source == ImageSource.GHCR:
+            if not self.image_org.strip():
+                raise ValueError("image_org must not be empty for the GHCR image source")
+            if bool(self.image_tag.strip()) == bool(self.image_ref.strip()):
+                raise ValueError("GHCR images require exactly one of image_tag or image_ref")
+        else:
+            if self.image_tag.strip():
+                raise ValueError("image_tag is supported only for the GHCR image source")
+            if not self.image_ref.strip():
+                raise ValueError("community images require an image_ref branch")
+
         partitions = self.data_partitions
         if not partitions:
             raise ValueError("data_partitions must contain at least one partition")

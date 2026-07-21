@@ -16,5 +16,5 @@ apiVersion: v2
 name: osdu-spi-service
 description: Generic OSDU service chart for Azure SPI deployments on AKS
 type: application
-version: 0.1.1
+version: 0.1.2
 appVersion: "master"

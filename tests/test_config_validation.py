@@ -23,6 +23,7 @@ import pytest
 from pydantic import ValidationError
 
 from spi.config import Config
+from spi.images import ImageSource
 
 
 def _validation_message(exc_info: pytest.ExceptionInfo) -> str:
@@ -47,6 +48,13 @@ class TestValidPartitions:
     def test_application_insights_can_be_enabled(self):
         cfg = Config(env="dev1", application_insights=True)
         assert cfg.application_insights is True
+
+    def test_ghcr_images_are_the_default_baseline(self):
+        cfg = Config(env="dev1")
+        assert cfg.image_source == ImageSource.GHCR
+        assert cfg.image_org == "yuchen-osdu"
+        assert cfg.image_tag == "main-snapshot"
+        assert cfg.image_ref == ""
 
     def test_empty_env_still_valid(self):
         cfg = Config(env="", data_partitions=["p1"])

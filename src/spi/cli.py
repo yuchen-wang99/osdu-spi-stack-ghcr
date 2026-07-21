@@ -33,8 +33,13 @@ from .guard import (
     verify_spi_cluster,
 )
 from .images import (
+    DEFAULT_GHCR_ORG,
+    DEFAULT_GHCR_TAG,
     DEFAULT_IMAGE_BRANCH,
+    IMAGE_LOCK_CONFIGMAP,
+    IMAGE_LOCK_NAMESPACE,
     ImageResolutionError,
+    ImageSource,
     render_image_lock_configmap,
     resolve_image_lock,
 )
@@ -83,6 +88,11 @@ def _show_config(config: Config, *, show_application_insights: bool = True):
     table.add_row("Branch", config.repo_branch)
     table.add_row("Data Partitions", ", ".join(config.data_partitions))
     table.add_row("Key Vault", config.keyvault_name)
+    selector = config.image_ref or config.image_tag
+    image_value = f"{config.image_source.value}:{selector}"
+    if config.image_source == ImageSource.GHCR:
+        image_value = f"{image_value} ({config.image_org})"
+    table.add_row("Service Images", image_value)
     if show_application_insights:
         table.add_row(
             "Application Insights",
@@ -131,7 +141,19 @@ def _build_config(
     acme_email: str = "",
     name_suffix: str = "",
     application_insights: bool = False,
+    image_source: ImageSource = ImageSource.GHCR,
+    image_org: str = DEFAULT_GHCR_ORG,
+    image_tag: Optional[str] = None,
+    image_ref: str = "",
 ) -> Config:
+    resolved_tag = image_tag
+    resolved_ref = image_ref
+    if image_source == ImageSource.GHCR and resolved_tag is None and not resolved_ref:
+        resolved_tag = DEFAULT_GHCR_TAG
+    if image_source == ImageSource.COMMUNITY:
+        resolved_tag = ""
+        resolved_ref = resolved_ref or DEFAULT_IMAGE_BRANCH
+
     return Config.from_env(
         env=env,
         name_suffix=name_suffix,
@@ -145,7 +167,129 @@ def _build_config(
         ingress_prefix=ingress_prefix,
         acme_email=acme_email,
         application_insights=application_insights,
+        image_source=image_source,
+        image_org=image_org,
+        image_tag=resolved_tag or "",
+        image_ref=resolved_ref,
     )
+
+
+def _resolve_image_selection(
+    *,
+    image_source: Optional[ImageSource],
+    image_org: Optional[str],
+    image_tag: Optional[str],
+    image_ref: Optional[str],
+    image_branch: Optional[str],
+    current: Optional[tuple[ImageSource, str, str, str]] = None,
+) -> tuple[ImageSource, str, str, str]:
+    """Resolve explicit image options against a deployment's current selection."""
+    for option_name, value in (
+        ("--image-org", image_org),
+        ("--image-tag", image_tag),
+        ("--image-ref", image_ref),
+        ("--image-branch", image_branch),
+    ):
+        if value is not None and not value.strip():
+            raise ValueError(f"{option_name} must not be empty")
+
+    image_org = image_org.strip() if image_org is not None else None
+    image_tag = image_tag.strip() if image_tag is not None else None
+    image_ref = image_ref.strip() if image_ref is not None else None
+    image_branch = image_branch.strip() if image_branch is not None else None
+
+    if image_tag is not None and image_ref is not None:
+        raise ValueError("--image-tag and --image-ref cannot be used together")
+    if image_branch is not None and (image_tag is not None or image_ref is not None):
+        raise ValueError("--image-branch cannot be combined with --image-tag or --image-ref")
+    if image_branch is not None and image_source not in (None, ImageSource.COMMUNITY):
+        raise ValueError("--image-branch is a legacy community-image option")
+
+    base_source, base_org, base_tag, base_ref = current or (
+        ImageSource.GHCR,
+        DEFAULT_GHCR_ORG,
+        DEFAULT_GHCR_TAG,
+        "",
+    )
+
+    if image_branch is not None:
+        return ImageSource.COMMUNITY, "", "", image_branch
+
+    inferred_source = (
+        ImageSource.GHCR
+        if image_source is None
+        and (image_tag is not None or image_ref is not None or image_org is not None)
+        else None
+    )
+    source = image_source or inferred_source or base_source
+    source_changed = image_source is not None and source != base_source
+    source_changed = source_changed or (inferred_source is not None and source != base_source)
+
+    if source_changed:
+        if source == ImageSource.GHCR:
+            tag, ref = DEFAULT_GHCR_TAG, ""
+        else:
+            tag, ref = "", DEFAULT_IMAGE_BRANCH
+    else:
+        tag, ref = base_tag, base_ref
+
+    if image_tag is not None:
+        if source != ImageSource.GHCR:
+            raise ValueError("--image-tag is supported only with --image-source ghcr")
+        tag, ref = image_tag, ""
+    elif image_ref is not None:
+        if source != ImageSource.GHCR:
+            raise ValueError(
+                "--image-ref is for GHCR Git refs; use --image-branch for community images"
+            )
+        tag, ref = "", image_ref
+
+    if source == ImageSource.GHCR:
+        if image_org is not None:
+            org = image_org
+        elif source_changed or base_source != ImageSource.GHCR:
+            org = DEFAULT_GHCR_ORG
+        else:
+            org = base_org or DEFAULT_GHCR_ORG
+    else:
+        if image_org is not None:
+            raise ValueError("--image-org is supported only with --image-source ghcr")
+        org = ""
+
+    return source, org, tag, ref
+
+
+def _read_image_lock_selection() -> tuple[ImageSource, str, str, str]:
+    """Read the source, organization, and selector pinned in the live image lock."""
+    configmap = kubectl_json(["get", "configmap", IMAGE_LOCK_CONFIGMAP, "-n", IMAGE_LOCK_NAMESPACE])
+    if configmap is None:
+        raise RuntimeError(
+            f"Unable to read {IMAGE_LOCK_NAMESPACE}/{IMAGE_LOCK_CONFIGMAP}; "
+            "specify an image source and selector explicitly"
+        )
+
+    data = configmap.get("data")
+    if not isinstance(data, dict):
+        raise RuntimeError(f"{IMAGE_LOCK_NAMESPACE}/{IMAGE_LOCK_CONFIGMAP} has no image-lock data")
+
+    raw_source = data.get("IMAGE_SOURCE", ImageSource.COMMUNITY.value)
+    try:
+        source = ImageSource(raw_source)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"{IMAGE_LOCK_NAMESPACE}/{IMAGE_LOCK_CONFIGMAP} has invalid IMAGE_SOURCE {raw_source!r}"
+        ) from exc
+
+    if source == ImageSource.GHCR:
+        tag = data.get("IMAGE_TAG", "")
+        ref = data.get("IMAGE_REF", "")
+        if not tag and not ref:
+            tag = DEFAULT_GHCR_TAG
+        org = data.get("IMAGE_ORG", "") or DEFAULT_GHCR_ORG
+        return source, org, tag, ref
+
+    ref = data.get("IMAGE_REF") or data.get("IMAGE_BRANCH") or DEFAULT_IMAGE_BRANCH
+    return source, "", "", ref
 
 
 def _resolve_name_suffix(env: str, for_up: bool) -> str:
@@ -365,12 +509,33 @@ def up(
     refresh_images: bool = typer.Option(
         True,
         "--refresh-images/--no-refresh-images",
-        help="Resolve current OSDU master image tags and write the Flux image lock.",
+        help="Resolve service images and write the Flux image lock.",
     ),
-    image_branch: str = typer.Option(
-        DEFAULT_IMAGE_BRANCH,
+    image_source: Optional[ImageSource] = typer.Option(
+        None,
+        "--image-source",
+        help="Service image source: ghcr (SPI service forks) or community.",
+    ),
+    image_org: Optional[str] = typer.Option(
+        None,
+        "--image-org",
+        help="GitHub organization containing SPI service repositories and GHCR packages.",
+    ),
+    image_tag: Optional[str] = typer.Option(
+        None,
+        "--image-tag",
+        help="Exact GHCR tag shared by the service fleet, such as main-snapshot "
+        "or a coordinated release tag.",
+    ),
+    image_ref: Optional[str] = typer.Option(
+        None,
+        "--image-ref",
+        help="Advanced: resolve the same Git ref to a sha-* image in every service repository.",
+    ),
+    image_branch: Optional[str] = typer.Option(
+        None,
         "--image-branch",
-        help="OSDU image branch suffix to resolve from the community registry.",
+        help="Legacy alias for community image branches.",
     ),
     application_insights: Optional[bool] = typer.Option(
         None,
@@ -401,6 +566,22 @@ def up(
         requested=application_insights,
         for_up=not dry_run,
     )
+    try:
+        (
+            resolved_image_source,
+            resolved_image_org,
+            resolved_image_tag,
+            resolved_image_ref,
+        ) = _resolve_image_selection(
+            image_source=image_source,
+            image_org=image_org,
+            image_tag=image_tag,
+            image_ref=image_ref,
+            image_branch=image_branch,
+        )
+    except ValueError as exc:
+        console.print(f"[error]{exc}[/error]")
+        raise typer.Exit(code=2)
 
     config = _build_config(
         profile=profile,
@@ -415,6 +596,10 @@ def up(
         acme_email=resolve_acme_email(acme_email),
         name_suffix=name_suffix,
         application_insights=resolved_application_insights,
+        image_source=resolved_image_source,
+        image_org=resolved_image_org,
+        image_tag=resolved_image_tag,
+        image_ref=resolved_image_ref,
     )
 
     _show_config(config)
@@ -426,7 +611,6 @@ def up(
             config,
             dry_run=dry_run,
             refresh_images=refresh_images,
-            image_branch=image_branch,
         )
         if dry_run:
             console.print(
@@ -561,12 +745,33 @@ def reconcile(
     refresh_images: bool = typer.Option(
         False,
         "--refresh-images",
-        help="Resolve current OSDU master image tags and update osdu-image-lock before reconciling.",
+        help="Resolve service images and update osdu-image-lock before reconciling.",
     ),
-    image_branch: str = typer.Option(
-        DEFAULT_IMAGE_BRANCH,
+    image_source: Optional[ImageSource] = typer.Option(
+        None,
+        "--image-source",
+        help="Service image source: ghcr (SPI service forks) or community.",
+    ),
+    image_org: Optional[str] = typer.Option(
+        None,
+        "--image-org",
+        help="GitHub organization containing SPI service repositories and GHCR packages.",
+    ),
+    image_tag: Optional[str] = typer.Option(
+        None,
+        "--image-tag",
+        help="Exact GHCR tag shared by the service fleet, such as main-snapshot "
+        "or a coordinated release tag.",
+    ),
+    image_ref: Optional[str] = typer.Option(
+        None,
+        "--image-ref",
+        help="Advanced: resolve the same Git ref to a sha-* image in every service repository.",
+    ),
+    image_branch: Optional[str] = typer.Option(
+        None,
         "--image-branch",
-        help="OSDU image branch suffix to resolve from the community registry.",
+        help="Legacy alias for community image branches.",
     ),
 ):
     """Force Flux to reconcile the git source and stack."""
@@ -580,6 +785,12 @@ def reconcile(
             "[error]--refresh-images cannot be combined with --suspend or --resume.[/error]"
         )
         raise typer.Exit(code=1)
+    if not refresh_images and any(
+        option is not None
+        for option in (image_source, image_org, image_tag, image_ref, image_branch)
+    ):
+        console.print("[error]Image selector options require --refresh-images.[/error]")
+        raise typer.Exit(code=2)
 
     ctx = verify_spi_cluster()
     console.print(f"  [dim]Cluster context: {ctx}[/dim]")
@@ -605,9 +816,43 @@ def reconcile(
         return
 
     if refresh_images:
-        console.print("\n[bold]Resolving OSDU service images...[/bold]")
         try:
-            resolved = resolve_image_lock(branch=image_branch)
+            current_selection = _read_image_lock_selection()
+        except RuntimeError as exc:
+            if (
+                image_source is None
+                and image_tag is None
+                and image_ref is None
+                and image_branch is None
+            ):
+                console.print(f"[error]{exc}[/error]")
+                raise typer.Exit(code=1)
+            current_selection = None
+
+        try:
+            resolved_source, resolved_org, resolved_tag, resolved_ref = _resolve_image_selection(
+                image_source=image_source,
+                image_org=image_org,
+                image_tag=image_tag,
+                image_ref=image_ref,
+                image_branch=image_branch,
+                current=current_selection,
+            )
+        except ValueError as exc:
+            console.print(f"[error]{exc}[/error]")
+            raise typer.Exit(code=2)
+
+        selector = resolved_ref or resolved_tag
+        console.print(
+            f"\n[bold]Resolving {resolved_source.value} service images at {selector}...[/bold]"
+        )
+        try:
+            resolved = resolve_image_lock(
+                source=resolved_source,
+                tag=resolved_tag,
+                ref=resolved_ref,
+                org=resolved_org,
+            )
         except ImageResolutionError as exc:
             console.print(f"[error]Unable to resolve OSDU service images: {exc}[/error]")
             raise typer.Exit(code=1)
@@ -617,7 +862,13 @@ def reconcile(
                 f"  [success]{name}[/success] -> {image.repository.split('/')[-1]}:{image.tag[:12]}"
             )
 
-        image_lock_yaml = render_image_lock_configmap(resolved, branch=image_branch)
+        image_lock_yaml = render_image_lock_configmap(
+            resolved,
+            source=resolved_source,
+            tag=resolved_tag,
+            ref=resolved_ref,
+            org=resolved_org,
+        )
         display_yaml(image_lock_yaml, "ConfigMap: osdu-image-lock")
         kubectl_apply_yaml(image_lock_yaml, "apply osdu-image-lock ConfigMap")
         display_result("osdu-image-lock ConfigMap updated")

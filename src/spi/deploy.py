@@ -38,7 +38,6 @@ from .bootstrap import (
 from .config import Config, IngressMode
 from .console import console, display_result, display_yaml
 from .images import (
-    DEFAULT_IMAGE_BRANCH,
     ImageResolutionError,
     render_image_lock_configmap,
     resolve_image_lock,
@@ -211,12 +210,20 @@ def _create_spi_init_values(config: Config) -> None:
     )
 
 
-def _resolve_image_lock(image_branch: str) -> str:
-    """Resolve current OSDU service images and render the Flux image lock."""
+def _resolve_image_lock(config: Config) -> str:
+    """Resolve the configured service image baseline and render the Flux lock."""
 
-    console.print("\n[bold]Resolving OSDU service images...[/bold]")
+    selector = config.image_ref or config.image_tag
+    console.print(
+        f"\n[bold]Resolving {config.image_source.value} service images at {selector}...[/bold]"
+    )
     try:
-        resolved = resolve_image_lock(branch=image_branch)
+        resolved = resolve_image_lock(
+            source=config.image_source,
+            tag=config.image_tag,
+            ref=config.image_ref,
+            org=config.image_org,
+        )
     except ImageResolutionError as exc:
         console.print(f"[error]Unable to resolve OSDU service images: {exc}[/error]")
         raise
@@ -226,7 +233,13 @@ def _resolve_image_lock(image_branch: str) -> str:
             f"  [success]{name}[/success] -> {image.repository.split('/')[-1]}:{image.tag[:12]}"
         )
 
-    return render_image_lock_configmap(resolved, branch=image_branch)
+    return render_image_lock_configmap(
+        resolved,
+        source=config.image_source,
+        tag=config.image_tag,
+        ref=config.image_ref,
+        org=config.image_org,
+    )
 
 
 def _create_image_lock(image_lock_yaml: str) -> None:
@@ -437,7 +450,6 @@ def deploy_azure(
     config: Config,
     dry_run: bool = False,
     refresh_images: bool = True,
-    image_branch: str = DEFAULT_IMAGE_BRANCH,
 ) -> None:
     """Provision Azure infra, bootstrap Kubernetes, deploy via GitOps.
 
@@ -449,7 +461,7 @@ def deploy_azure(
     if refresh_images and not dry_run:
         # Resolve before provisioning so registry/API failures stop quickly and
         # never leave a partially configured cluster with a mixed image set.
-        image_lock_yaml = _resolve_image_lock(image_branch)
+        image_lock_yaml = _resolve_image_lock(config)
 
     # For dns mode we need to resolve the DNS zone BEFORE running main.bicep
     # so the conditional external-dns-identity + DNS Zone Contributor role
