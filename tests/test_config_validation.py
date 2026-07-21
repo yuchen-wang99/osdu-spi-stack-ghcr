@@ -22,7 +22,7 @@ exceeds the 24-char Storage account limit.
 import pytest
 from pydantic import ValidationError
 
-from spi.config import Config
+from spi.config import Config, Profile
 from spi.images import ImageSource
 
 
@@ -55,6 +55,10 @@ class TestValidPartitions:
         assert cfg.image_org == "yuchen-osdu"
         assert cfg.image_tag == "main-snapshot"
         assert cfg.image_ref == ""
+
+    def test_full_profile_uses_the_implemented_thirteen_service_stack(self):
+        cfg = Config(env="dev1", profile=Profile.FULL)
+        assert cfg.gitops_profile == "core"
 
     def test_empty_env_still_valid(self):
         cfg = Config(env="", data_partitions=["p1"])
