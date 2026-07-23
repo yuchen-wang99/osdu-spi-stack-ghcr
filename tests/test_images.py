@@ -17,9 +17,12 @@ from datetime import datetime, timezone
 from spi import images
 from spi.images import (
     ImageRegistryEntry,
+    ImageSource,
     ResolvedImage,
     image_lock_names,
     render_image_lock_configmap,
+    resolve_ghcr_ref_image,
+    resolve_ghcr_tag_image,
     resolve_image,
 )
 
@@ -85,12 +88,89 @@ def test_render_image_lock_contains_service_keys_without_schema_load():
 
     yaml = render_image_lock_configmap(
         resolved,
-        branch="master",
+        source=ImageSource.COMMUNITY,
+        ref="master",
+        org="",
         resolved_at=datetime(2026, 5, 22, tzinfo=timezone.utc),
     )
 
     assert "name: osdu-image-lock" in yaml
+    assert 'IMAGE_SOURCE: "community"' in yaml
+    assert 'IMAGE_TAG: ""' in yaml
     assert 'IMAGE_BRANCH: "master"' in yaml
     assert "PARTITION_IMAGE_REPOSITORY" in yaml
+    assert "PARTITION_IMAGE_DIGEST" in yaml
     assert "INDEXER_QUEUE_IMAGE_TAG" in yaml
     assert "SCHEMA_LOAD_IMAGE_TAG" not in yaml
+
+
+def test_resolve_ghcr_tag_image_pins_manifest_digest(monkeypatch):
+    monkeypatch.setattr(
+        images,
+        "_ghcr_manifest_digest",
+        lambda repository, tag: "sha256:" + ("b" * 64),
+    )
+
+    resolved = resolve_ghcr_tag_image(
+        service_name="partition",
+        org="yuchen-osdu",
+        tag="main-snapshot",
+    )
+
+    assert resolved.repository == "ghcr.io/yuchen-osdu/partition"
+    assert resolved.tag == "main-snapshot"
+    assert resolved.digest == "sha256:" + ("b" * 64)
+    assert resolved.image == f"{resolved.repository}@{resolved.digest}"
+
+
+def test_resolve_ghcr_ref_image_uses_ref_commit_and_manifest_digest(monkeypatch):
+    commit_sha = "a" * 40
+
+    monkeypatch.setattr(
+        images,
+        "github_get",
+        lambda url: {
+            "sha": commit_sha,
+            "commit": {"committer": {"date": "2026-07-20T00:00:00Z"}},
+        },
+    )
+    monkeypatch.setattr(
+        images,
+        "_ghcr_manifest_digest",
+        lambda repository, tag: "sha256:" + ("b" * 64),
+    )
+
+    resolved = resolve_ghcr_ref_image(
+        service_name="partition",
+        org="yuchen-osdu",
+        ref="fix/core-lib-azure-3.0.1",
+    )
+
+    assert resolved.repository == "ghcr.io/yuchen-osdu/partition"
+    assert resolved.tag == "sha-" + commit_sha[:12]
+    assert resolved.digest == "sha256:" + ("b" * 64)
+    assert resolved.image == f"{resolved.repository}@{resolved.digest}"
+
+
+def test_render_ghcr_main_lock_records_tag_selector():
+    resolved = {
+        name: ResolvedImage(
+            name=name,
+            repository=f"ghcr.io/yuchen-osdu/{name}",
+            tag="main-snapshot",
+            created_at="",
+            digest=f"sha256:{name}",
+        )
+        for name in image_lock_names()
+    }
+
+    yaml = render_image_lock_configmap(
+        resolved,
+        source=ImageSource.GHCR,
+        org="yuchen-osdu",
+        resolved_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+    )
+
+    assert 'IMAGE_TAG: "main-snapshot"' in yaml
+    assert 'IMAGE_REF: ""' in yaml
+    assert 'IMAGE_BRANCH: ""' in yaml

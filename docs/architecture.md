@@ -226,9 +226,19 @@ Changes to this repository (middleware manifests, profile definitions, service Y
 
 ### Service update loop
 
-When an OSDU service merges to master, its GitLab CI pipeline builds a new container image and the community registry exposes a new immutable SHA tag. `spi up` resolves the current master tags and writes them to `flux-system/osdu-image-lock`; the service Kustomizations consume that ConfigMap through Flux post-build substitution. This keeps the deployed image set explicit while avoiding stale, pruned tags in long-lived test workflows.
+The default service baseline comes from each SPI service repository's latest
+successful `main` build. The engineering system publishes that build as
+`main-snapshot`; `spi up` resolves the tag once, pins its immutable OCI digest,
+and writes the resulting fleet to `osdu-flux/osdu-image-lock`. Service
+Kustomizations consume that ConfigMap through Flux post-build substitution.
 
-Run `spi reconcile --refresh-images` to resolve a fresh image lock for an existing cluster, then reconcile the service Kustomizations. `scripts/resolve-image-tags.py --update` remains available for static image references such as the schema-load Job.
+`--image-tag` selects an exact shared tag such as a coordinated release.
+`--image-ref` is an advanced path for resolving the same Git feature ref to each
+repository's `sha-<commit>` image. Run `spi reconcile --refresh-images` to
+refresh the configured selector. `--image-source community` retains the prior
+OSDU GitLab resolver as a fallback.
+`scripts/resolve-image-tags.py --update` remains available for static image
+references such as the schema-load Job.
 
 ### Suspend and resume
 

@@ -127,11 +127,15 @@ in an SPI Stack deployment.
 
 ## OSDU Service Images
 
-Services use Azure SPI images from the OSDU community registry:
-- Pattern: `community.opengroup.org:5555/osdu/platform/.../*-master:tag`
-- `spi up` resolves current master SHA tags and writes them to
-  `osdu-flux/osdu-image-lock`; service manifests use Flux post-build
-  substitution from that ConfigMap.
+Services default to public images built by the yuchen-osdu SPI service forks:
+- Baseline: `ghcr.io/yuchen-osdu/<service>:main-snapshot`, resolved once and
+  pinned by immutable digest.
+- `--image-tag` selects a coordinated release tag.
+- `--image-ref` is the advanced feature-ref path and resolves to each
+  repository's `sha-<commit>` image.
+- `spi up` writes the resolved fleet to `osdu-flux/osdu-image-lock`; service
+  manifests use Flux post-build substitution from that ConfigMap.
+- `--image-source community` retains the OSDU GitLab registry as a fallback.
 - Refresh a live cluster with `uv run spi reconcile --refresh-images`.
 - To refresh static checked-in image references, run
   `python scripts/resolve-image-tags.py --update`.

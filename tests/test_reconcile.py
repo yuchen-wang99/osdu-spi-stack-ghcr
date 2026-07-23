@@ -7,7 +7,10 @@
 
 from unittest import mock
 
+import pytest
+
 from spi import cli, guard
+from spi.images import ImageSource
 
 
 def test_resolve_flux_namespace_reads_gitrepository_namespace():
@@ -102,3 +105,136 @@ def test_set_flux_suspend_raises_when_listing_fails():
     ):
         with pytest.raises(RuntimeError, match="Failed to list Flux helmrelease"):
             cli._set_flux_suspend("osdu-flux", True)
+
+
+def test_legacy_image_branch_selects_community_images():
+    assert cli._resolve_image_selection(
+        image_source=None,
+        image_org=None,
+        image_tag=None,
+        image_ref=None,
+        image_branch="master",
+    ) == (ImageSource.COMMUNITY, "", "", "master")
+
+
+def test_image_refresh_preserves_current_selection_when_options_omitted():
+    current = (
+        ImageSource.GHCR,
+        "yuchen-osdu",
+        "",
+        "fix/core-lib-azure-3.0.1",
+    )
+
+    assert (
+        cli._resolve_image_selection(
+            image_source=None,
+            image_org=None,
+            image_tag=None,
+            image_ref=None,
+            image_branch=None,
+            current=current,
+        )
+        == current
+    )
+
+
+def test_image_source_change_uses_new_source_defaults():
+    assert cli._resolve_image_selection(
+        image_source=ImageSource.COMMUNITY,
+        image_org=None,
+        image_tag=None,
+        image_ref=None,
+        image_branch=None,
+        current=(ImageSource.GHCR, "yuchen-osdu", "", "feature/ref"),
+    ) == (ImageSource.COMMUNITY, "", "", "master")
+
+
+def test_ghcr_defaults_to_main_snapshot():
+    assert cli._resolve_image_selection(
+        image_source=None,
+        image_org=None,
+        image_tag=None,
+        image_ref=None,
+        image_branch=None,
+    ) == (ImageSource.GHCR, "yuchen-osdu", "main-snapshot", "")
+
+
+def test_explicit_tag_replaces_feature_ref():
+    assert cli._resolve_image_selection(
+        image_source=None,
+        image_org=None,
+        image_tag="v1.2.3",
+        image_ref=None,
+        image_branch=None,
+        current=(ImageSource.GHCR, "yuchen-osdu", "", "feature/ref"),
+    ) == (ImageSource.GHCR, "yuchen-osdu", "v1.2.3", "")
+
+
+@pytest.mark.parametrize(
+    ("option", "kwargs"),
+    [
+        ("--image-org", {"image_org": " "}),
+        ("--image-tag", {"image_tag": ""}),
+        ("--image-ref", {"image_ref": "  "}),
+        ("--image-branch", {"image_branch": ""}),
+    ],
+)
+def test_empty_image_selector_options_are_rejected(option, kwargs):
+    options = {
+        "image_source": None,
+        "image_org": None,
+        "image_tag": None,
+        "image_ref": None,
+        "image_branch": None,
+    }
+    options.update(kwargs)
+
+    with pytest.raises(ValueError, match=option):
+        cli._resolve_image_selection(**options)
+
+
+def test_read_image_lock_selection_supports_legacy_community_lock():
+    configmap = {"data": {"IMAGE_BRANCH": "master"}}
+    with mock.patch.object(cli, "kubectl_json", return_value=configmap):
+        assert cli._read_image_lock_selection() == (
+            ImageSource.COMMUNITY,
+            "",
+            "",
+            "master",
+        )
+
+
+def test_read_image_lock_selection_reads_ghcr_metadata():
+    configmap = {
+        "data": {
+            "IMAGE_SOURCE": "ghcr",
+            "IMAGE_ORG": "example",
+            "IMAGE_TAG": "",
+            "IMAGE_REF": "feature/ref",
+        }
+    }
+    with mock.patch.object(cli, "kubectl_json", return_value=configmap):
+        assert cli._read_image_lock_selection() == (
+            ImageSource.GHCR,
+            "example",
+            "",
+            "feature/ref",
+        )
+
+
+def test_read_image_lock_selection_reads_ghcr_tag():
+    configmap = {
+        "data": {
+            "IMAGE_SOURCE": "ghcr",
+            "IMAGE_ORG": "example",
+            "IMAGE_TAG": "main-snapshot",
+            "IMAGE_REF": "",
+        }
+    }
+    with mock.patch.object(cli, "kubectl_json", return_value=configmap):
+        assert cli._read_image_lock_selection() == (
+            ImageSource.GHCR,
+            "example",
+            "main-snapshot",
+            "",
+        )

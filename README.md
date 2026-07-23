@@ -64,6 +64,15 @@ spi check
 # Deploy (provisions Azure resources + activates GitOps)
 spi up --env dev1
 
+# Deploy a coordinated release tag across SPI service repositories
+spi up --env dev1 --image-tag v1.2.3
+
+# Advanced: validate the same feature ref across multiple service repositories
+spi up --env dev1 --image-ref fix/core-lib-azure-3.0.1
+
+# Compatibility fallback to OSDU community images
+spi up --env dev1 --image-source community --image-branch master
+
 # Multi-partition deploy (one CosmosDB + Service Bus + storage per partition)
 spi up --env dev1 --partition opendes --partition tenant1
 
@@ -195,7 +204,7 @@ Commands:
   reconcile  Force Flux to re-sync from Git               [--suspend] [--resume] [--refresh-images]
 ```
 
-Use `--dry-run` on `spi up` to preview the Bicep changes (`az deployment group what-if`) before any Azure resources are created beyond the resource group. `--ingress-mode` defaults to `azure`; the other supported modes are `dns` (per-service hostnames on an owned Azure DNS zone) and `ip` (bare IP, debug only). `--refresh-images` re-resolves the OSDU community image tags and reconciles the service Kustomizations.
+Use `--dry-run` on `spi up` to preview the Bicep changes (`az deployment group what-if`) before any Azure resources are created beyond the resource group. `--ingress-mode` defaults to `azure`; the other supported modes are `dns` (per-service hostnames on an owned Azure DNS zone) and `ip` (bare IP, debug only). Service images default to each public `yuchen-osdu` package's `main-snapshot`, which is immediately pinned to an immutable digest. Use `--image-tag` for a coordinated release tag, `--image-ref` for advanced multi-repository feature validation, or `--image-source community` for the OSDU GitLab fallback. `--refresh-images` re-resolves the configured selector and reconciles the service Kustomizations.
 
 
 ## Documentation
